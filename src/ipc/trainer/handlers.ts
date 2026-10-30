@@ -4,12 +4,24 @@ import { os } from "@orpc/server";
 import { dialog } from "electron";
 import { ipcContext } from "../context";
 import {
+  addProjectsToQueueInputSchema,
+  deleteProjectFromQueueInputSchema,
   getModelInfoInputSchema,
+  processSingleProjectTrainingInputSchema,
   saveProjectRulesInputSchema,
   scanProjectInputSchema,
   testModelInputSchema,
+  toggleIgnoreProjectInputSchema,
   trainModelInputSchema,
 } from "./schemas";
+import {
+  deleteProjectFromDb,
+  getAllProjects,
+  getProjectByPath,
+  type ProjectRecord,
+  toggleIgnoreProject as toggleIgnoreInDb,
+  upsertProject,
+} from "../db/database";
 
 export interface ProjectAnalysis {
   name: string;
@@ -191,10 +203,8 @@ async function scanDirectory(
   return entries;
 }
 
-export const scanProject = os
-  .input(scanProjectInputSchema)
-  .handler(async ({ input }): Promise<ProjectAnalysis> => {
-    const rootPath = path.resolve(input.projectPath);
+export async function analyzeProjectDirectory(dirPath: string): Promise<ProjectAnalysis> {
+  const rootPath = path.resolve(dirPath);
     let projectName = path.basename(rootPath);
     const techStack = new Set<string>();
     const frameworks = new Set<string>();
@@ -341,6 +351,12 @@ ATURAN KODING & STANDAR PROYEK:
       packageInfo,
       suggestedPrompt,
     };
+}
+
+export const scanProject = os
+  .input(scanProjectInputSchema)
+  .handler(async ({ input }): Promise<ProjectAnalysis> => {
+    return await analyzeProjectDirectory(input.projectPath);
   });
 
 export const trainModel = os
@@ -525,6 +541,268 @@ export const testModel = os
           answeredPersona: false,
           hasResponse: false,
         },
+      };
+    }
+  });
+
+export const selectMultipleFolders = os
+  .use(ipcContext.mainWindowContext)
+  .handler(async ({ context }) => {
+    const { window } = context;
+    const result = await dialog.showOpenDialog(window, {
+      properties: ["openDirectory", "multiSelections"],
+      title: "Pilih Satu atau Banyak Folder Proyek untuk ER-AI",
+    });
+
+    return {
+      canceled: result.canceled,
+      paths: result.filePaths || [],
+    };
+  });
+
+export const getProjectQueue = os.handler(async (): Promise<ProjectRecord[]> => {
+  return getAllProjects();
+});
+
+export const addProjectsToQueue = os
+  .input(addProjectsToQueueInputSchema)
+  .handler(async ({ input }): Promise<ProjectRecord[]> => {
+    for (const p of input.paths) {
+      const resolved = path.resolve(p);
+      const existing = getProjectByPath(resolved);
+      if (!existing) {
+        try {
+          const analysis = await analyzeProjectDirectory(resolved);
+          upsertProject({
+            project_path: resolved,
+            project_name: analysis.name,
+            tech_stack: analysis.techStack,
+            frameworks: analysis.frameworks,
+            summary: analysis.summary,
+            status: "pending",
+          });
+        } catch {
+          const baseName = path.basename(resolved);
+          upsertProject({
+            project_path: resolved,
+            project_name: baseName,
+            status: "pending",
+          });
+        }
+      }
+    }
+    return getAllProjects();
+  });
+
+export const toggleIgnoreProjectHandler = os
+  .input(toggleIgnoreProjectInputSchema)
+  .handler(async ({ input }): Promise<ProjectRecord[]> => {
+    toggleIgnoreInDb(input.projectPath, input.isIgnored);
+    return getAllProjects();
+  });
+
+export const deleteProjectFromQueueHandler = os
+  .input(deleteProjectFromQueueInputSchema)
+  .handler(async ({ input }): Promise<ProjectRecord[]> => {
+    deleteProjectFromDb(input.projectPath);
+    return getAllProjects();
+  });
+
+export const processSingleProjectTraining = os
+  .input(processSingleProjectTrainingInputSchema)
+  .handler(async ({ input }) => {
+    const startTime = Date.now();
+    const resolvedPath = path.resolve(input.projectPath);
+    const existing = getProjectByPath(resolvedPath);
+
+    // 1. Mark as training in SQLite
+    upsertProject({
+      project_path: resolvedPath,
+      project_name: existing?.project_name || path.basename(resolvedPath),
+      status: "training",
+    });
+
+    try {
+      // 2. Analyze project
+      const analysis = await analyzeProjectDirectory(resolvedPath);
+      const cleanName = analysis.name
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, "-")
+        .slice(0, 24);
+      const targetModelName = `er-ai-${cleanName}`;
+
+      // 3. Fetch personal habits from baseModel
+      let personalHabits = "";
+      try {
+        const infoRes = await fetch("http://localhost:11434/api/show", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model: input.baseModel }),
+        });
+        if (infoRes.ok) {
+          const infoData = (await infoRes.json()) as any;
+          if (infoData.system) personalHabits = infoData.system.trim();
+        }
+      } catch {
+        // ignore
+      }
+
+      // 4. Synthesize system prompt
+      let systemPrompt = input.customSystemPrompt;
+      if (!systemPrompt || !systemPrompt.trim()) {
+        const habitsHeader = personalHabits
+          ? `// ============================================\n// ATURAN & KEBIASAAN KODING PRIBADI ANDA:\n// (Tercatat dari model: ${input.baseModel})\n// ============================================\n${personalHabits}\n\n`
+          : "";
+
+        systemPrompt = `${habitsHeader}// ============================================
+// PENGETAHUAN ARSITEKTUR PROYEK SPESIFIK:
+// ============================================
+Kamu adalah ER-AI, asisten koding khusus untuk proyek "${analysis.name}".
+
+PENGETAHUAN ARSITEKTUR PROYEK:
+- Nama Proyek: ${analysis.name}
+- Lokasi Direktori: ${analysis.path}
+- Teknologi: ${analysis.techStack.join(", ") || "Umum"}
+- Framework: ${analysis.frameworks.join(", ") || "Standard"}
+
+STRUKTUR UTAMA PROYEK:
+${analysis.folderTree.slice(0, 20).map((f) => `  - ${f}`).join("\n")}
+
+ATURAN KODING & STANDAR:
+1. Terapkan Clean Code, konsisten dengan struktur folder dan penamaan yang sudah ada.
+2. Jika menggunakan TypeScript, selalu terapkan type-safety yang ketat (hindari tipe 'any').
+3. Berikan kode lengkap yang langsung dapat diuji/dijalankan tanpa pengantar bertele-tele.
+4. Gunakan Bahasa Indonesia yang santai, jelas, dan profesional.
+5. Pastikan perubahan tidak merusak fungsi yang sudah berjalan di modul terkait.`;
+      }
+
+      // 5. Save AGENTS.md and Modelfile locally
+      try {
+        await fs.writeFile(
+          path.join(resolvedPath, "AGENTS.md"),
+          systemPrompt,
+          "utf-8"
+        );
+        const modelfile = `FROM ${input.baseModel}\nPARAMETER temperature ${input.temperature}\nPARAMETER top_p 0.85\nPARAMETER num_ctx ${input.contextLength}\nSYSTEM """\n${systemPrompt.trim()}\n"""\n`;
+        await fs.writeFile(
+          path.join(resolvedPath, "Modelfile.er-ai"),
+          modelfile,
+          "utf-8"
+        );
+      } catch {
+        // ignore file write errors
+      }
+
+      // 6. Call Ollama /api/create
+      const createRes = await fetch("http://localhost:11434/api/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: targetModelName,
+          from: input.baseModel,
+          system: systemPrompt.trim(),
+          parameters: {
+            temperature: input.temperature,
+            top_p: 0.85,
+            num_ctx: input.contextLength,
+          },
+          stream: false,
+        }),
+      });
+
+      if (!createRes.ok) {
+        const errText = await createRes.text();
+        throw new Error(
+          `Gagal melatih di Ollama (HTTP ${createRes.status}): ${errText}`
+        );
+      }
+
+      // 7. Generate in-depth AI Analysis Report
+      let aiAnalysisText = "";
+      let tokensPerSec = 0;
+      let evalCount = 0;
+
+      const analysisPrompt = `Kamu adalah pakar arsitektur software senior. Analisis proyek "${analysis.name}" berdasarkan metadata berikut:
+- Direktori: ${resolvedPath}
+- Tech Stack: ${analysis.techStack.join(", ")}
+- Framework & Library: ${analysis.frameworks.join(", ")}
+- Struktur Direktori:
+${analysis.folderTree.slice(0, 20).join("\n")}
+
+Berikan laporan analisa komprehensif dalam Bahasa Indonesia mencakup:
+### 1. Evaluasi Arsitektur & Pola Desain
+(Analisis modularitas, pemisahan layer, dan kerapian struktur folder)
+
+### 2. Potensi Risiko & Area Optimasi
+(Sebutkan potensi bottleneck performa, keamanan, atau dependensi)
+
+### 3. Rekomendasi Standar Koding Khusus Proyek untuk AI Agent
+(3-5 pedoman spesifik agar AI koding konsisten dengan proyek ini)`;
+
+      try {
+        const generateRes = await fetch("http://localhost:11434/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: targetModelName,
+            prompt: analysisPrompt,
+            stream: false,
+          }),
+        });
+
+        if (generateRes.ok) {
+          const genData = (await generateRes.json()) as any;
+          aiAnalysisText = (genData.response || "").trim();
+          evalCount = genData.eval_count || 0;
+          const evalDurationSec = (genData.eval_duration || 1) / 1e9;
+          tokensPerSec =
+            evalDurationSec > 0 ? Math.round(evalCount / evalDurationSec) : 0;
+        }
+      } catch (genErr: any) {
+        aiAnalysisText = `[Model berhasil dilatih, namun analisa otomatis terlewat: ${genErr.message}]`;
+      }
+
+      const totalDuration = Date.now() - startTime;
+      const now = new Date().toISOString();
+
+      // 8. Update SQLite with training status, AI analysis, metrics
+      const updated = upsertProject({
+        project_path: resolvedPath,
+        project_name: analysis.name,
+        target_model_name: targetModelName,
+        base_model: input.baseModel,
+        status: "completed",
+        tech_stack: analysis.techStack,
+        frameworks: analysis.frameworks,
+        summary: analysis.summary,
+        system_prompt: systemPrompt,
+        ai_analysis: aiAnalysisText,
+        tokens_per_sec: tokensPerSec,
+        duration_ms: totalDuration,
+        trained_at: now,
+      });
+
+      return {
+        success: true,
+        project: updated,
+        aiAnalysis: aiAnalysisText,
+        tokensPerSec,
+        durationMs: totalDuration,
+        message: `Proyek "${analysis.name}" berhasil dilatih dan dianalisis oleh AI!`,
+      };
+    } catch (err: any) {
+      upsertProject({
+        project_path: resolvedPath,
+        project_name: existing?.project_name || path.basename(resolvedPath),
+        status: "failed",
+      });
+      return {
+        success: false,
+        project: getProjectByPath(resolvedPath),
+        aiAnalysis: "",
+        tokensPerSec: 0,
+        durationMs: Date.now() - startTime,
+        message: err.message,
       };
     }
   });

@@ -27,3 +27,25 @@ export const testModelInputSchema = z.object({
   modelName: z.string().min(1),
   testPrompt: z.string().optional(),
 });
+
+export const addProjectsToQueueInputSchema = z.object({
+  paths: z.array(z.string().min(1)),
+});
+
+export const toggleIgnoreProjectInputSchema = z.object({
+  projectPath: z.string().min(1),
+  isIgnored: z.boolean(),
+});
+
+export const deleteProjectFromQueueInputSchema = z.object({
+  projectPath: z.string().min(1),
+});
+
+export const processSingleProjectTrainingInputSchema = z.object({
+  projectPath: z.string().min(1),
+  baseModel: z.string().default("er-ai:latest"),
+  templateId: z.string().default("fullstack"),
+  temperature: z.number().default(0.3),
+  contextLength: z.number().default(32768),
+  customSystemPrompt: z.string().optional(),
+});

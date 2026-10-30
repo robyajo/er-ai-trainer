@@ -1,19 +1,31 @@
 import {
+  addProjectsToQueue,
+  deleteProjectFromQueueHandler,
   getModelInfo,
   getOllamaModels,
+  getProjectQueue,
+  processSingleProjectTraining,
   saveProjectRules,
   scanProject,
   selectFolder,
+  selectMultipleFolders,
   testModel,
+  toggleIgnoreProjectHandler,
   trainModel,
 } from "./handlers";
 
 export const trainer = {
   selectFolder,
+  selectMultipleFolders,
   getOllamaModels,
   getModelInfo,
   scanProject,
   trainModel,
   saveProjectRules,
   testModel,
+  getProjectQueue,
+  addProjectsToQueue,
+  toggleIgnoreProject: toggleIgnoreProjectHandler,
+  deleteProjectFromQueue: deleteProjectFromQueueHandler,
+  processSingleProjectTraining,
 };
