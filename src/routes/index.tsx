@@ -13,7 +13,6 @@ import {
   AlertCircle,
   RefreshCw,
   Copy,
-  Save,
   Rocket,
   Code2,
   Bug,
@@ -37,7 +36,6 @@ import {
   getOllamaModels,
   getProjectQueue,
   processSingleProjectTraining,
-  saveProjectRules,
   scanProject,
   selectFolder,
   selectMultipleFolders,
@@ -281,7 +279,6 @@ function TrainerPage() {
   const [progressPercent, setProgressPercent] = useState<number>(0);
   const [trainingStatus, setTrainingStatus] = useState<"idle" | "running" | "success" | "error">("idle");
   const [trainingLogs, setTrainingLogs] = useState<string[]>([]);
-  const [isSavingRules, setIsSavingRules] = useState<boolean>(false);
 
   // Verification & Test Plan state
   const [testPlanResult, setTestPlanResult] = useState<TestPlanResult | null>(null);
@@ -570,25 +567,11 @@ ${projectContent.trim()}`;
     setIsAnalysisModalOpen(true);
   };
 
-  // Save AGENTS.md
-  const handleSaveAgentsRules = async () => {
-    if (!projectPath) {
-      toast.error("Pilih folder proyek terlebih dahulu!");
-      return;
-    }
-    setIsSavingRules(true);
-    try {
-      const res = await saveProjectRules(projectPath, systemPrompt);
-      if (res.success) {
-        toast.success(`File AGENTS.md berhasil disimpan di: ${res.path}`);
-      } else {
-        toast.error(res.message);
-      }
-    } catch (err: any) {
-      toast.error(`Gagal menyimpan: ${err.message}`);
-    } finally {
-      setIsSavingRules(false);
-    }
+  // Copy Prompt
+  const handleCopyPrompt = () => {
+    if (!systemPrompt.trim()) return;
+    navigator.clipboard.writeText(systemPrompt);
+    toast.success("Instruksi prompt berhasil disalin ke clipboard!");
   };
 
   // Copy Modelfile
@@ -1110,7 +1093,7 @@ ${systemPrompt.trim()}
 
               {/* Action Buttons Bar */}
               <div className="flex flex-col sm:flex-row gap-2 pt-2 sm:items-center sm:justify-between border-t border-border shrink-0">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -1124,14 +1107,18 @@ ${systemPrompt.trim()}
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={handleSaveAgentsRules}
-                    disabled={isSavingRules || !projectPath}
+                    onClick={handleCopyPrompt}
+                    disabled={!systemPrompt.trim()}
                     className="text-xs gap-1.5 h-8 hover:border-teal-500/40 hover:text-teal-500"
-                    title="Simpan AGENTS.md langsung ke folder proyek Anda"
+                    title="Salin instruksi prompt ke clipboard"
                   >
-                    <Save className="size-3.5" />
-                    Simpan AGENTS.md
+                    <FileCode className="size-3.5" />
+                    Salin Prompt
                   </Button>
+                  <div className="hidden xl:flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-mono pl-1">
+                    <ShieldCheck className="size-3.5" />
+                    <span>Read-Only: File proyek Anda aman 100% (tidak dimodifikasi)</span>
+                  </div>
                 </div>
 
                 <Button

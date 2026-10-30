@@ -384,15 +384,8 @@ ${systemPrompt.trim()}
 """
 `;
 
-    // 2. Optionally write local Modelfile in the project root
-    if (saveLocalModelfile && projectPath) {
-      try {
-        const targetPath = path.join(projectPath, "Modelfile.er-ai");
-        await fs.writeFile(targetPath, modelfileContent, "utf-8");
-      } catch {
-        // ignore file write error
-      }
-    }
+    // 2. Training is strictly READ-ONLY on project directory
+    // Project files are never modified or created to ensure zero interference with existing codebase agent configurations.
 
     // 3. Call Ollama API /api/create with structured fields
     try {
@@ -676,22 +669,7 @@ ATURAN KODING & STANDAR:
 5. Pastikan perubahan tidak merusak fungsi yang sudah berjalan di modul terkait.`;
       }
 
-      // 5. Save AGENTS.md and Modelfile locally
-      try {
-        await fs.writeFile(
-          path.join(resolvedPath, "AGENTS.md"),
-          systemPrompt,
-          "utf-8"
-        );
-        const modelfile = `FROM ${input.baseModel}\nPARAMETER temperature ${input.temperature}\nPARAMETER top_p 0.85\nPARAMETER num_ctx ${input.contextLength}\nSYSTEM """\n${systemPrompt.trim()}\n"""\n`;
-        await fs.writeFile(
-          path.join(resolvedPath, "Modelfile.er-ai"),
-          modelfile,
-          "utf-8"
-        );
-      } catch {
-        // ignore file write errors
-      }
+      // 5. Scanned project directory is strictly READ-ONLY (no files are modified or written)
 
       // 6. Call Ollama /api/create
       const createRes = await fetch("http://localhost:11434/api/create", {
