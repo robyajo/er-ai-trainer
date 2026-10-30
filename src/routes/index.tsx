@@ -28,6 +28,8 @@ import {
   Zap,
   Gauge,
   CheckCheck,
+  SlidersHorizontal,
+  PenTool,
 } from "lucide-react";
 import {
   getModelInfo,
@@ -238,6 +240,9 @@ function TrainerPage() {
   const [temperature, setTemperature] = useState<number>(0.3);
   const [contextLength, setContextLength] = useState<number>(32768);
 
+  // Responsive mobile/tablet view switcher ("config" | "editor")
+  const [activeMobileView, setActiveMobileView] = useState<"config" | "editor">("config");
+
   // Existing habits / knowledge state
   const [existingHabits, setExistingHabits] = useState<string>("");
   const [hasExistingHabits, setHasExistingHabits] = useState<boolean>(false);
@@ -328,6 +333,8 @@ function TrainerPage() {
       // Generate prompt combining personal habits with template
       applyTemplateWithHabits(selectedTemplate, data, hasExistingHabits && autoIncludeHabits);
       toast.success(`Berhasil menganalisis proyek "${data.name}"!`);
+      // Auto-switch to editor view on smaller screens
+      setActiveMobileView("editor");
     } catch (err: any) {
       toast.error(`Gagal menganalisis proyek: ${err.message}`);
     } finally {
@@ -604,44 +611,80 @@ ${systemPrompt.trim()}
   };
 
   return (
-    <div className="flex h-screen flex-col bg-background text-foreground overflow-hidden">
-      {/* App Header */}
-      <header className="flex h-14 shrink-0 items-center justify-between border-b px-4 bg-card/60 backdrop-blur">
+    <div className="flex flex-1 flex-col overflow-hidden bg-background text-foreground">
+      {/* Top Application Header */}
+      <header className="flex h-13 shrink-0 items-center justify-between border-b border-border/70 bg-card/60 backdrop-blur px-3 sm:px-4">
         <div className="flex items-center gap-2.5">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-            <BrainCircuit className="size-5" />
+          <div className="flex size-7 items-center justify-center rounded-lg bg-teal-500/15 border border-teal-500/30 text-teal-600 dark:text-teal-400 shadow-sm">
+            <BrainCircuit className="size-4" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="font-bold text-sm tracking-tight">ER-AI Trainer Studio</h1>
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono">
-                v1.1.0
+              <h1 className="font-bold text-xs sm:text-sm tracking-tight text-foreground">
+                ER-AI Trainer Studio
+              </h1>
+              <Badge
+                variant="outline"
+                className="hidden sm:inline-flex text-[10px] px-1.5 py-0 font-mono border-teal-500/30 text-teal-600 dark:text-teal-400 bg-teal-500/5"
+              >
+                Teal Studio
               </Badge>
             </div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-[10px] text-muted-foreground hidden sm:block">
               Knowledge Ingestion & Verified Model Tuning Hub
             </p>
           </div>
         </div>
 
-        {/* Ollama Status Indicator */}
-        <div className="flex items-center gap-3">
+        {/* Responsive Navigation Toggle for screens < lg */}
+        <div className="flex lg:hidden items-center rounded-lg border border-border/60 bg-muted/40 p-0.5 text-xs">
+          <button
+            type="button"
+            onClick={() => setActiveMobileView("config")}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-all font-medium text-[11px] ${
+              activeMobileView === "config"
+                ? "bg-card text-teal-600 dark:text-teal-400 shadow-sm border border-teal-500/20"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <SlidersHorizontal className="size-3" />
+            <span>Setup & Model</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveMobileView("editor")}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-all font-medium text-[11px] ${
+              activeMobileView === "editor"
+                ? "bg-card text-teal-600 dark:text-teal-400 shadow-sm border border-teal-500/20"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <PenTool className="size-3" />
+            <span>Editor & Latih</span>
+          </button>
+        </div>
+
+        {/* Ollama Status Indicator & Theme Toggle */}
+        <div className="flex items-center gap-2 sm:gap-3">
           <div
-            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border ${
+            className={`flex items-center gap-1.5 rounded-full px-2 sm:px-2.5 py-0.5 sm:py-1 text-[11px] sm:text-xs font-medium border ${
               ollamaStatus.online
-                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                ? "bg-teal-500/10 text-teal-700 dark:text-teal-300 border-teal-500/30"
                 : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
             }`}
           >
             <span
               className={`size-2 rounded-full ${
-                ollamaStatus.online ? "bg-emerald-500 animate-pulse" : "bg-rose-500"
+                ollamaStatus.online ? "bg-teal-500 animate-pulse" : "bg-rose-500"
               }`}
             />
-            <span>
+            <span className="hidden sm:inline">
               {ollamaStatus.online
                 ? `Ollama Aktif (${ollamaStatus.models.length} model)`
                 : "Ollama Offline"}
+            </span>
+            <span className="inline sm:hidden">
+              {ollamaStatus.online ? "Aktif" : "Offline"}
             </span>
           </div>
 
@@ -649,29 +692,33 @@ ${systemPrompt.trim()}
             variant="ghost"
             size="icon"
             onClick={refreshOllama}
-            className="size-8"
+            className="size-7 sm:size-8 text-muted-foreground hover:text-teal-500"
             title="Refresh Ollama Models"
           >
-            <RefreshCw className="size-4" />
+            <RefreshCw className="size-3.5 sm:size-4" />
           </Button>
 
           <ToggleTheme />
         </div>
       </header>
 
-      {/* Main Content Body */}
-      <div className="flex flex-1 overflow-hidden p-4 gap-4">
-        {/* Left Column: Project Selector & Config */}
-        <div className="flex w-[380px] shrink-0 flex-col gap-3 overflow-y-auto pr-1">
+      {/* Main Responsive Grid Body */}
+      <div className="flex flex-1 overflow-hidden p-2.5 sm:p-4 gap-3 lg:gap-4 flex-col lg:flex-row">
+        {/* Left Column: Project Selector & Model Config */}
+        <div
+          className={`w-full lg:w-[350px] xl:w-[380px] shrink-0 flex-col gap-3 overflow-y-auto pr-0 lg:pr-1 ${
+            activeMobileView === "config" ? "flex" : "hidden lg:flex"
+          }`}
+        >
           {/* Card 1: Folder Picker */}
-          <Card className="border-border/80 shadow-sm">
-            <CardHeader className="pb-3 pt-4 px-4">
-              <CardTitle className="text-xs font-semibold flex items-center gap-1.5 uppercase text-muted-foreground tracking-wider">
-                <FolderOpen className="size-3.5 text-primary" />
+          <Card className="border-border/70 bg-card/80 shadow-sm backdrop-blur-sm transition-all hover:border-teal-500/30">
+            <CardHeader className="pb-2.5 pt-3.5 px-3.5 sm:px-4">
+              <CardTitle className="text-[10px] sm:text-[11px] font-mono tracking-widest uppercase text-muted-foreground flex items-center gap-1.5">
+                <FolderOpen className="size-3.5 text-teal-500" />
                 Folder Proyek
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3 px-4 pb-4">
+            <CardContent className="space-y-2.5 px-3.5 sm:px-4 pb-3.5">
               <div className="flex gap-2">
                 <Input
                   readOnly
@@ -682,7 +729,7 @@ ${systemPrompt.trim()}
                 <Button
                   onClick={handlePickFolder}
                   size="sm"
-                  className="gap-1.5 shrink-0 h-8 text-xs"
+                  className="gap-1.5 shrink-0 h-8 text-xs bg-teal-600 hover:bg-teal-500 text-white font-medium shadow-sm transition-all"
                 >
                   <FolderOpen className="size-3.5" />
                   Pilih Folder
@@ -691,31 +738,34 @@ ${systemPrompt.trim()}
 
               {/* Scanning status */}
               {isScanning && (
-                <div className="flex items-center gap-2 rounded-md bg-muted/60 p-2 text-xs text-muted-foreground animate-pulse">
-                  <RefreshCw className="size-3.5 animate-spin text-primary" />
+                <div className="flex items-center gap-2 rounded-lg border border-teal-500/20 bg-teal-500/5 p-2 text-xs text-teal-600 dark:text-teal-400 animate-pulse">
+                  <RefreshCw className="size-3.5 animate-spin text-teal-500" />
                   <span>Menganalisis file dan arsitektur proyek...</span>
                 </div>
               )}
 
               {/* Project preview if scanned */}
               {projectData && (
-                <div className="space-y-2 rounded-lg border bg-muted/20 p-2.5 text-xs">
+                <div className="space-y-2 rounded-lg border border-border/80 bg-muted/20 p-2.5 text-xs">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-foreground truncate max-w-[200px]">
                       {projectData.name}
                     </span>
-                    <Badge variant="secondary" className="text-[10px] py-0">
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] py-0 font-mono bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20"
+                    >
                       {projectData.folderTree.length} item
                     </Badge>
                   </div>
 
                   {projectData.techStack.length > 0 && (
-                    <div className="flex flex-wrap gap-1 pt-1">
+                    <div className="flex flex-wrap gap-1 pt-0.5">
                       {projectData.techStack.map((tech) => (
                         <Badge
                           key={tech}
                           variant="outline"
-                          className="text-[10px] bg-background/50 px-1.5 py-0"
+                          className="text-[10px] bg-background/50 px-1.5 py-0 border-border/70 text-muted-foreground font-mono"
                         >
                           {tech}
                         </Badge>
@@ -723,7 +773,7 @@ ${systemPrompt.trim()}
                     </div>
                   )}
 
-                  <p className="text-[11px] text-muted-foreground line-clamp-2">
+                  <p className="text-[11px] text-muted-foreground line-clamp-2 leading-snug">
                     {projectData.summary}
                   </p>
                 </div>
@@ -732,14 +782,14 @@ ${systemPrompt.trim()}
           </Card>
 
           {/* Card 2: Model Configuration */}
-          <Card className="border-border/80 shadow-sm">
-            <CardHeader className="pb-3 pt-4 px-4">
-              <CardTitle className="text-xs font-semibold flex items-center gap-1.5 uppercase text-muted-foreground tracking-wider">
-                <Cpu className="size-3.5 text-primary" />
+          <Card className="border-border/70 bg-card/80 shadow-sm backdrop-blur-sm transition-all hover:border-teal-500/30">
+            <CardHeader className="pb-2.5 pt-3.5 px-3.5 sm:px-4">
+              <CardTitle className="text-[10px] sm:text-[11px] font-mono tracking-widest uppercase text-muted-foreground flex items-center gap-1.5">
+                <Cpu className="size-3.5 text-teal-500" />
                 Target Model Ollama
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3 px-4 pb-4">
+            <CardContent className="space-y-2.5 px-3.5 sm:px-4 pb-3.5">
               {/* Base Model Select */}
               <div className="space-y-1">
                 <label className="text-[11px] font-medium text-muted-foreground">
@@ -777,14 +827,16 @@ ${systemPrompt.trim()}
                   value={targetModelName}
                   onChange={(e) => setTargetModelName(e.target.value)}
                   placeholder="contoh: er-ai-myproject"
-                  className="h-8 text-xs font-mono font-medium"
+                  className="h-8 text-xs font-mono font-medium focus-visible:ring-teal-500/40"
                 />
               </div>
 
               {/* Context Length & Temperature */}
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <div className="space-y-1">
-                  <label className="text-[10px] text-muted-foreground">Context Window:</label>
+                  <label className="text-[10px] text-muted-foreground font-mono">
+                    Context Window:
+                  </label>
                   <Input
                     type="number"
                     value={contextLength}
@@ -793,7 +845,9 @@ ${systemPrompt.trim()}
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] text-muted-foreground">Temperature:</label>
+                  <label className="text-[10px] text-muted-foreground font-mono">
+                    Temperature:
+                  </label>
                   <Input
                     type="number"
                     step="0.05"
@@ -810,16 +864,19 @@ ${systemPrompt.trim()}
 
           {/* Card 3: Detected Personal Habits / Previous Knowledge */}
           {hasExistingHabits && (
-            <Card className="border-indigo-500/30 bg-indigo-500/5 dark:bg-indigo-950/20 shadow-sm transition-all">
-              <CardHeader className="py-2.5 px-3">
+            <Card className="border-teal-500/30 bg-teal-500/5 dark:bg-teal-950/20 shadow-sm transition-all">
+              <CardHeader className="py-2.5 px-3.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
-                    <BrainCircuit className="size-4 text-indigo-500 animate-pulse" />
-                    <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+                    <BrainCircuit className="size-4 text-teal-500 animate-pulse" />
+                    <span className="text-xs font-semibold text-teal-700 dark:text-teal-300">
                       Kebiasaan Koding Model Terdeteksi
                     </span>
                   </div>
-                  <Badge variant="outline" className="text-[10px] border-indigo-500/30 text-indigo-500 px-1 py-0">
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] border-teal-500/40 text-teal-600 dark:text-teal-300 font-mono px-1 py-0"
+                  >
                     Tercatat
                   </Badge>
                 </div>
@@ -827,18 +884,18 @@ ${systemPrompt.trim()}
                   Model <strong>{selectedBaseModel}</strong> sudah menyimpan preferensi & aturan koding Anda sebelumnya.
                 </p>
               </CardHeader>
-              <CardContent className="px-3 pb-3 pt-0 space-y-2">
+              <CardContent className="px-3.5 pb-3.5 pt-0 space-y-2">
                 <button
                   type="button"
                   onClick={() => setShowHabitDetail(!showHabitDetail)}
-                  className="flex items-center justify-between w-full text-[11px] text-indigo-500 hover:underline pt-1"
+                  className="flex items-center justify-between w-full text-[11px] text-teal-600 dark:text-teal-400 hover:underline pt-0.5"
                 >
                   <span>{showHabitDetail ? "Sembunyikan Catatan" : "Lihat Isi Kebiasaan Tersimpan"}</span>
                   {showHabitDetail ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
                 </button>
 
                 {showHabitDetail && (
-                  <div className="rounded border bg-background/80 p-2 font-mono text-[10px] max-h-32 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+                  <div className="rounded border border-teal-500/20 bg-background/90 p-2 font-mono text-[10px] max-h-32 overflow-y-auto whitespace-pre-wrap leading-relaxed">
                     {existingHabits}
                   </div>
                 )}
@@ -849,7 +906,7 @@ ${systemPrompt.trim()}
                     size="sm"
                     variant="default"
                     onClick={handleMergeHabits}
-                    className="h-7 text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-medium"
+                    className="h-7 text-xs bg-teal-600 hover:bg-teal-500 text-white font-medium shadow-sm transition-all"
                   >
                     <Sparkles className="size-3 mr-1" />
                     Gabungkan ke Prompt Proyek Ini
@@ -860,7 +917,7 @@ ${systemPrompt.trim()}
                     size="sm"
                     variant="ghost"
                     onClick={handleUseExistingHabitOnly}
-                    className="h-7 text-xs text-muted-foreground"
+                    className="h-7 text-xs text-muted-foreground hover:text-foreground"
                   >
                     Pakai Kebiasaan Ini Saja
                   </Button>
@@ -871,22 +928,26 @@ ${systemPrompt.trim()}
         </div>
 
         {/* Right Column: Templates, Prompt Editor & Action Bar */}
-        <div className="flex flex-1 flex-col gap-3 overflow-hidden">
-          <Card className="flex flex-1 flex-col overflow-hidden border-border/80 shadow-sm">
-            <CardHeader className="pb-3 pt-4 px-4 shrink-0 border-b bg-muted/10">
-              <div className="flex items-center justify-between">
+        <div
+          className={`flex flex-1 flex-col gap-3 overflow-hidden min-w-0 ${
+            activeMobileView === "editor" ? "flex" : "hidden lg:flex"
+          }`}
+        >
+          <Card className="flex flex-1 flex-col overflow-hidden border-border/70 bg-card/80 shadow-sm backdrop-blur-sm transition-all">
+            <CardHeader className="pb-2.5 pt-3.5 px-3.5 sm:px-4 shrink-0 border-b border-border/60 bg-muted/10">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
-                  <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
-                    <FileCode className="size-4 text-primary" />
+                  <CardTitle className="text-xs sm:text-sm font-semibold flex items-center gap-1.5">
+                    <FileCode className="size-4 text-teal-500" />
                     Instruksi Pengetahuan & Template Koding
                   </CardTitle>
-                  <CardDescription className="text-xs">
+                  <CardDescription className="text-[11px] sm:text-xs">
                     Pilih template instruksi atau modifikasi teks di bawah untuk melatih model ER-AI.
                   </CardDescription>
                 </div>
 
                 {hasExistingHabits && (
-                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                  <label className="flex items-center gap-1.5 text-[11px] sm:text-xs text-muted-foreground cursor-pointer select-none">
                     <input
                       type="checkbox"
                       checked={autoIncludeHabits}
@@ -896,15 +957,15 @@ ${systemPrompt.trim()}
                           applyTemplateWithHabits(selectedTemplate, projectData, e.target.checked);
                         }
                       }}
-                      className="rounded border-border"
+                      className="rounded border-border accent-teal-600"
                     />
-                    <span>Otomatis sertakan kebiasaan koding lama</span>
+                    <span>Sertakan kebiasaan koding lama</span>
                   </label>
                 )}
               </div>
 
-              {/* Template Buttons */}
-              <div className="grid grid-cols-2 gap-2 pt-2.5 sm:grid-cols-3 md:grid-cols-6">
+              {/* Template Buttons Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-6 gap-2 pt-2">
                 {TEMPLATES.map((tpl) => {
                   const isSelected = selectedTemplate === tpl.id;
                   const Icon = tpl.icon;
@@ -915,13 +976,17 @@ ${systemPrompt.trim()}
                       onClick={() => handleSelectTemplate(tpl.id)}
                       className={`flex flex-col items-start gap-1 rounded-lg border p-2 text-left transition-all ${
                         isSelected
-                          ? "border-primary bg-primary/10 shadow-sm"
-                          : "bg-muted/30 hover:bg-muted/70 border-border"
+                          ? "border-teal-500 bg-teal-500/10 text-teal-600 dark:text-teal-400 shadow-sm"
+                          : "bg-muted/30 hover:bg-muted/70 border-border/70 hover:border-teal-500/30"
                       }`}
                     >
                       <div className="flex items-center gap-1 font-medium text-xs">
-                        <Icon className={`size-3.5 ${isSelected ? "text-primary" : "text-muted-foreground"}`} />
-                        <span className={`truncate ${isSelected ? "text-primary font-semibold" : ""}`}>
+                        <Icon
+                          className={`size-3.5 ${
+                            isSelected ? "text-teal-600 dark:text-teal-400" : "text-muted-foreground"
+                          }`}
+                        />
+                        <span className={`truncate ${isSelected ? "font-semibold" : ""}`}>
                           {tpl.name}
                         </span>
                       </div>
@@ -934,11 +999,13 @@ ${systemPrompt.trim()}
               </div>
             </CardHeader>
 
-            <CardContent className="flex flex-1 flex-col overflow-hidden p-4 space-y-3">
+            <CardContent className="flex flex-1 flex-col overflow-hidden p-3 sm:p-4 space-y-3">
               {/* Textarea Editor */}
-              <div className="flex flex-1 flex-col space-y-1 overflow-hidden">
+              <div className="flex flex-1 flex-col space-y-1 overflow-hidden min-h-[180px]">
                 <div className="flex items-center justify-between shrink-0">
-                  <label className="text-xs font-medium">Instruksi Sistem (System Prompt):</label>
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Instruksi Sistem (System Prompt):
+                  </label>
                   <span className="text-[11px] text-muted-foreground font-mono">
                     {systemPrompt.length} karakter (~{Math.round(systemPrompt.length / 4)} token)
                   </span>
@@ -951,18 +1018,18 @@ ${systemPrompt.trim()}
                       ? "Sesuaikan instruksi untuk ER-AI di sini..."
                       : "Pilih folder project Anda di sebelah kiri untuk menghasilkan instruksi otomatis..."
                   }
-                  className="flex-1 font-mono text-xs leading-relaxed bg-background/90 resize-none min-h-[220px]"
+                  className="flex-1 font-mono text-xs leading-relaxed bg-background/90 resize-none min-h-[160px] border-border/80 focus-visible:ring-teal-500/40"
                 />
               </div>
 
               {/* Action Buttons */}
-              <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:items-center sm:justify-between border-t shrink-0">
+              <div className="flex flex-col sm:flex-row gap-2 pt-2 sm:items-center sm:justify-between border-t border-border/60 shrink-0">
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={handleCopyModelfile}
-                    className="text-xs gap-1.5 h-8"
+                    className="text-xs gap-1.5 h-8 hover:border-teal-500/40 hover:text-teal-500 transition-colors"
                     title="Salin format Modelfile lengkap"
                   >
                     <Copy className="size-3.5" />
@@ -973,7 +1040,7 @@ ${systemPrompt.trim()}
                     size="sm"
                     onClick={handleSaveAgentsRules}
                     disabled={isSavingRules || !projectData}
-                    className="text-xs gap-1.5 h-8"
+                    className="text-xs gap-1.5 h-8 hover:border-teal-500/40 hover:text-teal-500 transition-colors"
                     title="Simpan AGENTS.md langsung ke folder proyek Anda"
                   >
                     <Save className="size-3.5" />
@@ -984,7 +1051,7 @@ ${systemPrompt.trim()}
                 <Button
                   onClick={handleTrainWithAnimation}
                   disabled={!systemPrompt.trim()}
-                  className="gap-2 bg-primary font-semibold shadow-md hover:bg-primary/90 h-9 px-4"
+                  className="gap-2 bg-teal-600 hover:bg-teal-500 text-white font-semibold shadow-sm hover:shadow-teal-500/20 h-9 px-4 transition-all"
                 >
                   <Rocket className="size-4" />
                   Mulai Latih & Simpan ke Ollama
@@ -999,18 +1066,18 @@ ${systemPrompt.trim()}
       <Dialog
         open={isTrainingModalOpen}
         onOpenChange={(open) => {
-          if (trainingStatus === "running") return; // Prevent closing while running
+          if (trainingStatus === "running") return;
           setIsTrainingModalOpen(open);
         }}
       >
-        <DialogContent className="sm:max-w-[650px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] sm:max-w-[650px] max-h-[88vh] overflow-y-auto border-border/80 bg-card/95 backdrop-blur-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base font-bold">
+            <DialogTitle className="flex items-center gap-2 text-sm sm:text-base font-bold text-foreground">
               {trainingStatus === "running" && (
-                <Loader2 className="size-5 animate-spin text-primary" />
+                <Loader2 className="size-5 animate-spin text-teal-500" />
               )}
               {trainingStatus === "success" && (
-                <CheckCircle2 className="size-5 text-emerald-500" />
+                <CheckCircle2 className="size-5 text-teal-500" />
               )}
               {trainingStatus === "error" && (
                 <AlertCircle className="size-5 text-rose-500" />
@@ -1028,16 +1095,18 @@ ${systemPrompt.trim()}
           </DialogHeader>
 
           {/* Progress Bar & Percentage */}
-          <div className="space-y-2 py-1">
+          <div className="space-y-1.5 py-1">
             <div className="flex items-center justify-between text-xs">
               <span className="font-medium text-muted-foreground">Status Kemajuan:</span>
-              <span className="font-mono font-bold text-primary">{progressPercent}%</span>
+              <span className="font-mono font-bold text-teal-600 dark:text-teal-400">
+                {progressPercent}%
+              </span>
             </div>
             <Progress value={progressPercent} className="h-2" />
           </div>
 
           {/* Step-by-Step Stage List */}
-          <div className="space-y-1.5 rounded-lg border bg-muted/20 p-2.5">
+          <div className="space-y-1.5 rounded-lg border border-border/80 bg-muted/20 p-2.5">
             {TRAINING_STAGES.map((stage) => {
               const isPast = currentStageId > stage.id || trainingStatus === "success";
               const isCurrent = currentStageId === stage.id && trainingStatus === "running";
@@ -1048,15 +1117,15 @@ ${systemPrompt.trim()}
                   key={stage.id}
                   className={`flex items-start gap-2.5 rounded-md p-1.5 text-xs transition-colors ${
                     isCurrent
-                      ? "bg-primary/10 border border-primary/20"
+                      ? "bg-teal-500/10 border border-teal-500/30"
                       : isPast
                       ? "text-foreground"
                       : "text-muted-foreground/60"
                   }`}
                 >
                   <div className="pt-0.5 shrink-0">
-                    {isPast && <CheckCircle2 className="size-4 text-emerald-500" />}
-                    {isCurrent && <Loader2 className="size-4 animate-spin text-primary" />}
+                    {isPast && <CheckCircle2 className="size-4 text-teal-500" />}
+                    {isCurrent && <Loader2 className="size-4 animate-spin text-teal-500" />}
                     {isFailed && <AlertCircle className="size-4 text-rose-500" />}
                     {!isPast && !isCurrent && !isFailed && (
                       <Clock className="size-4 text-muted-foreground/40" />
@@ -1065,14 +1134,14 @@ ${systemPrompt.trim()}
 
                   <div className="flex-1">
                     <div className="flex items-center justify-between">
-                      <span className={`font-semibold ${isCurrent ? "text-primary" : ""}`}>
+                      <span className={`font-semibold ${isCurrent ? "text-teal-600 dark:text-teal-400" : ""}`}>
                         {stage.title}
                       </span>
                       {isPast && (
-                        <span className="text-[10px] text-emerald-600 font-medium">Selesai</span>
+                        <span className="text-[10px] text-teal-600 dark:text-teal-400 font-medium">Selesai</span>
                       )}
                       {isCurrent && (
-                        <span className="text-[10px] text-primary animate-pulse font-medium">
+                        <span className="text-[10px] text-teal-600 dark:text-teal-400 animate-pulse font-medium">
                           Sedang Berjalan...
                         </span>
                       )}
@@ -1086,46 +1155,52 @@ ${systemPrompt.trim()}
 
           {/* Verification & Test Plan Results (Visible upon success) */}
           {testPlanResult && testPlanResult.success && (
-            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-950/20 p-3 space-y-2.5">
+            <div className="rounded-lg border border-teal-500/30 bg-teal-500/5 dark:bg-teal-950/20 p-3 space-y-2.5">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 font-bold text-xs text-emerald-600 dark:text-emerald-400">
-                  <CheckCheck className="size-4" />
+                <div className="flex items-center gap-1.5 font-bold text-xs text-teal-700 dark:text-teal-300">
+                  <CheckCheck className="size-4 text-teal-500" />
                   Rencana Hasil Pengujian Model (Test Plan Verified)
                 </div>
-                <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-600">
+                <Badge
+                  variant="outline"
+                  className="text-[10px] font-mono border-teal-500/40 text-teal-600 dark:text-teal-300"
+                >
                   100% Lolos Uji
                 </Badge>
               </div>
 
               {/* Performance Metrics Cards */}
               <div className="grid grid-cols-3 gap-2">
-                <div className="rounded border bg-background/80 p-2 text-center">
+                <div className="rounded border border-border/80 bg-background/80 p-2 text-center">
                   <div className="flex items-center justify-center gap-1 text-[10px] text-muted-foreground">
                     <Zap className="size-3 text-amber-500" />
                     Kecepatan
                   </div>
                   <div className="text-xs font-mono font-bold text-foreground">
-                    {testPlanResult.tokensPerSec} <span className="text-[10px] font-normal text-muted-foreground">tok/s</span>
+                    {testPlanResult.tokensPerSec}{" "}
+                    <span className="text-[10px] font-normal text-muted-foreground">tok/s</span>
                   </div>
                 </div>
 
-                <div className="rounded border bg-background/80 p-2 text-center">
+                <div className="rounded border border-border/80 bg-background/80 p-2 text-center">
                   <div className="flex items-center justify-center gap-1 text-[10px] text-muted-foreground">
-                    <Gauge className="size-3 text-blue-500" />
+                    <Gauge className="size-3 text-teal-500" />
                     Latensi
                   </div>
                   <div className="text-xs font-mono font-bold text-foreground">
-                    {testPlanResult.durationMs} <span className="text-[10px] font-normal text-muted-foreground">ms</span>
+                    {testPlanResult.durationMs}{" "}
+                    <span className="text-[10px] font-normal text-muted-foreground">ms</span>
                   </div>
                 </div>
 
-                <div className="rounded border bg-background/80 p-2 text-center">
+                <div className="rounded border border-border/80 bg-background/80 p-2 text-center">
                   <div className="flex items-center justify-center gap-1 text-[10px] text-muted-foreground">
-                    <CheckCircle2 className="size-3 text-emerald-500" />
+                    <CheckCircle2 className="size-3 text-teal-500" />
                     Output
                   </div>
                   <div className="text-xs font-mono font-bold text-foreground">
-                    {testPlanResult.evalCount} <span className="text-[10px] font-normal text-muted-foreground">tokens</span>
+                    {testPlanResult.evalCount}{" "}
+                    <span className="text-[10px] font-normal text-muted-foreground">tokens</span>
                   </div>
                 </div>
               </div>
@@ -1136,7 +1211,7 @@ ${systemPrompt.trim()}
                   <span className="font-semibold text-foreground">Respon Uji Coba Model:</span>
                   <span className="text-[10px] italic">"{testPlanResult.prompt.slice(0, 45)}..."</span>
                 </div>
-                <div className="rounded border bg-background/90 p-2.5 font-mono text-[11px] leading-relaxed max-h-36 overflow-y-auto whitespace-pre-wrap">
+                <div className="rounded border border-teal-500/20 bg-background/90 p-2.5 font-mono text-[11px] leading-relaxed max-h-36 overflow-y-auto whitespace-pre-wrap">
                   {testPlanResult.response}
                 </div>
               </div>
@@ -1151,7 +1226,7 @@ ${systemPrompt.trim()}
                     value={interactivePrompt}
                     onChange={(e) => setInteractivePrompt(e.target.value)}
                     placeholder="contoh: Buatkan satu helper function sesuai stack proyek ini..."
-                    className="h-8 text-xs font-mono"
+                    className="h-8 text-xs font-mono focus-visible:ring-teal-500/40"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") handleRunInteractiveTest();
                     }}
@@ -1160,7 +1235,7 @@ ${systemPrompt.trim()}
                     size="sm"
                     onClick={handleRunInteractiveTest}
                     disabled={isInteractiveTesting || !interactivePrompt.trim()}
-                    className="h-8 text-xs gap-1 shrink-0"
+                    className="h-8 text-xs gap-1 shrink-0 bg-teal-600 hover:bg-teal-500 text-white"
                   >
                     {isInteractiveTesting ? (
                       <Loader2 className="size-3.5 animate-spin" />
@@ -1179,7 +1254,7 @@ ${systemPrompt.trim()}
             <span className="text-[10px] uppercase font-mono text-muted-foreground tracking-wider">
               Log Terminal & Proses:
             </span>
-            <div className="rounded-lg bg-black/90 dark:bg-black/80 p-2.5 font-mono text-[11px] text-emerald-400 max-h-24 overflow-y-auto border border-border/40 space-y-0.5">
+            <div className="rounded-lg bg-black/90 dark:bg-black/95 p-2.5 font-mono text-[11px] text-teal-400 max-h-24 overflow-y-auto border border-border/40 space-y-0.5">
               {trainingLogs.map((log, index) => (
                 <div
                   key={index}
@@ -1212,13 +1287,13 @@ ${systemPrompt.trim()}
 
           <DialogFooter className="pt-2">
             {trainingStatus === "running" ? (
-              <span className="text-xs text-muted-foreground animate-pulse">
+              <span className="text-xs text-muted-foreground animate-pulse font-mono">
                 Sedang memproses pelatihan & pengujian model...
               </span>
             ) : trainingStatus === "success" ? (
               <Button
                 onClick={() => setIsTrainingModalOpen(false)}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8"
+                className="bg-teal-600 hover:bg-teal-500 text-white text-xs h-8 shadow-sm"
               >
                 Selesai & Buka Editor
               </Button>
@@ -1235,7 +1310,7 @@ ${systemPrompt.trim()}
                 <Button
                   size="sm"
                   onClick={handleTrainWithAnimation}
-                  className="text-xs h-8"
+                  className="text-xs h-8 bg-teal-600 hover:bg-teal-500 text-white"
                 >
                   Coba Lagi
                 </Button>

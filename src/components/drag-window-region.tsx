@@ -32,16 +32,17 @@ export default function DragWindowRegion({ title }: DragWindowRegionProps) {
   const isMacOS = platform === "darwin";
 
   return (
-    <div className="flex w-full items-stretch justify-between">
-      <div className="draglayer w-full">
+    <div className="flex w-full items-stretch justify-between border-b border-border/60 bg-card/60 backdrop-blur text-xs">
+      <div className="draglayer w-full flex items-center px-3 py-1.5">
         {title && !isMacOS && (
-          <div className="flex flex-1 select-none whitespace-nowrap p-2 text-gray-400 text-xs">
+          <div className="flex flex-1 items-center gap-2 select-none whitespace-nowrap text-muted-foreground font-mono text-[11px] font-medium">
+            <span className="size-2 rounded-full bg-teal-500 animate-pulse" />
             {title}
           </div>
         )}
         {isMacOS && (
-          <div className="flex flex-1 p-2">
-            {/* Maintain the same height but do not display content */}
+          <div className="flex flex-1 py-1">
+            {/* Maintain height for macOS traffic lights */}
           </div>
         )}
       </div>
@@ -52,9 +53,9 @@ export default function DragWindowRegion({ title }: DragWindowRegionProps) {
 
 function WindowButtons() {
   return (
-    <div className="flex">
+    <div className="flex items-center text-muted-foreground">
       <button
-        className="p-2 hover:bg-slate-300"
+        className="px-3 py-1.5 hover:bg-muted hover:text-foreground transition-colors"
         onClick={minimizeWindow}
         title="Minimize"
         type="button"
@@ -70,7 +71,7 @@ function WindowButtons() {
         </svg>
       </button>
       <button
-        className="p-2 hover:bg-slate-300"
+        className="px-3 py-1.5 hover:bg-muted hover:text-foreground transition-colors"
         onClick={maximizeWindow}
         title="Maximize"
         type="button"
@@ -93,7 +94,7 @@ function WindowButtons() {
         </svg>
       </button>
       <button
-        className="p-2 hover:bg-red-300"
+        className="px-3 py-1.5 hover:bg-rose-500 hover:text-white transition-colors"
         onClick={closeWindow}
         title="Close"
         type="button"
