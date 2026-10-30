@@ -7,6 +7,7 @@ import {
   getModelInfoInputSchema,
   saveProjectRulesInputSchema,
   scanProjectInputSchema,
+  testModelInputSchema,
   trainModelInputSchema,
 } from "./schemas";
 
@@ -431,6 +432,99 @@ export const saveProjectRules = os
         success: false,
         path: "",
         message: `Gagal menulis AGENTS.md: ${err.message}`,
+      };
+    }
+  });
+
+export const testModel = os
+  .input(testModelInputSchema)
+  .handler(async ({ input }) => {
+    const startTime = Date.now();
+    const prompt =
+      input.testPrompt ||
+      "Halo ER-AI! Jelaskan secara singkat siapa kamu, pemahamanmu tentang proyek ini, dan aturan koding utama yang harus dipatuhi.";
+
+    try {
+      const res = await fetch("http://localhost:11434/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: input.modelName,
+          prompt,
+          stream: false,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        return {
+          success: false,
+          modelName: input.modelName,
+          prompt,
+          response: "",
+          error: `Gagal memanggil model (HTTP ${res.status}): ${errorText}`,
+          durationMs: Date.now() - startTime,
+          tokensPerSec: 0,
+          evalCount: 0,
+          checks: {
+            modelLoaded: false,
+            answeredPersona: false,
+            hasResponse: false,
+          },
+        };
+      }
+
+      const data = (await res.json()) as {
+        response: string;
+        total_duration?: number;
+        eval_count?: number;
+        eval_duration?: number;
+      };
+
+      const evalCount = data.eval_count || 0;
+      const evalDurationSec = (data.eval_duration || 1) / 1e9;
+      const tokensPerSec =
+        evalDurationSec > 0 ? Math.round(evalCount / evalDurationSec) : 0;
+      const totalDurationMs = data.total_duration
+        ? Math.round(data.total_duration / 1e6)
+        : Date.now() - startTime;
+
+      const lower = (data.response || "").toLowerCase();
+      const checks = {
+        modelLoaded: true,
+        answeredPersona:
+          lower.includes("er-ai") ||
+          lower.includes("asisten") ||
+          lower.includes("proyek") ||
+          lower.includes("koding"),
+        hasResponse: (data.response || "").trim().length > 0,
+      };
+
+      return {
+        success: true,
+        modelName: input.modelName,
+        prompt,
+        response: (data.response || "").trim(),
+        durationMs: totalDurationMs,
+        tokensPerSec,
+        evalCount,
+        checks,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        modelName: input.modelName,
+        prompt,
+        response: "",
+        error: err.message || "Gagal menghubungkan ke model Ollama",
+        durationMs: Date.now() - startTime,
+        tokensPerSec: 0,
+        evalCount: 0,
+        checks: {
+          modelLoaded: false,
+          answeredPersona: false,
+          hasResponse: false,
+        },
       };
     }
   });

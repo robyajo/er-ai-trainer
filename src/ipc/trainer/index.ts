@@ -4,6 +4,7 @@ import {
   saveProjectRules,
   scanProject,
   selectFolder,
+  testModel,
   trainModel,
 } from "./handlers";
 
@@ -14,4 +15,5 @@ export const trainer = {
   scanProject,
   trainModel,
   saveProjectRules,
+  testModel,
 };

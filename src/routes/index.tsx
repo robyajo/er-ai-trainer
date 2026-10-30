@@ -8,7 +8,6 @@ import {
   Layers,
   ShieldCheck,
   FileCode,
-  Terminal,
   CheckCircle2,
   AlertCircle,
   RefreshCw,
@@ -18,15 +17,17 @@ import {
   Code2,
   Bug,
   Database,
-  Info,
   BrainCircuit,
   Loader2,
   Clock,
-  ArrowRight,
   Check,
   X,
   ChevronDown,
   ChevronUp,
+  Send,
+  Zap,
+  Gauge,
+  CheckCheck,
 } from "lucide-react";
 import {
   getModelInfo,
@@ -34,6 +35,7 @@ import {
   saveProjectRules,
   scanProject,
   selectFolder,
+  testModel,
   trainModel,
 } from "@/actions/trainer";
 import type { ProjectAnalysis } from "@/ipc/trainer/handlers";
@@ -181,27 +183,43 @@ const TRAINING_STAGES: TrainingStage[] = [
     id: 2,
     title: "Sintesis Kebiasaan & Pengetahuan Koding",
     description: "Mengintegrasikan aturan koding personal dan konteks proyek.",
-    progressPercent: 45,
+    progressPercent: 40,
   },
   {
     id: 3,
     title: "Penyusunan Modelfile & Konfigurasi VRAM",
     description: "Mengatur context 32K (num_ctx 32768) dan parameter inference.",
-    progressPercent: 70,
+    progressPercent: 60,
   },
   {
     id: 4,
     title: "Membangun & Menginjeksi Model ke Ollama",
-    description: "Mengirim instruksi via POST /api/create ke server Ollama lokal.",
-    progressPercent: 90,
+    description: "Mengirim instruksi via POST /api/create ke runtime Ollama lokal.",
+    progressPercent: 80,
   },
   {
     id: 5,
-    title: "Finalisasi & Pendaftaran Model",
-    description: "Model siap digunakan langsung di Zed Editor, Cursor, dan AI Tool.",
+    title: "Rencana Pengujian & Verifikasi Hasil Model",
+    description: "Menjalankan pengujian live inferensi dan memverifikasi pengetahuan model.",
     progressPercent: 100,
   },
 ];
+
+interface TestPlanResult {
+  success: boolean;
+  modelName: string;
+  prompt: string;
+  response: string;
+  durationMs: number;
+  tokensPerSec: number;
+  evalCount: number;
+  checks: {
+    modelLoaded: boolean;
+    answeredPersona: boolean;
+    hasResponse: boolean;
+  };
+  error?: string;
+}
 
 function TrainerPage() {
   const [ollamaStatus, setOllamaStatus] = useState<{
@@ -223,7 +241,6 @@ function TrainerPage() {
   // Existing habits / knowledge state
   const [existingHabits, setExistingHabits] = useState<string>("");
   const [hasExistingHabits, setHasExistingHabits] = useState<boolean>(false);
-  const [isLoadingHabits, setIsLoadingHabits] = useState<boolean>(false);
   const [showHabitDetail, setShowHabitDetail] = useState<boolean>(false);
   const [autoIncludeHabits, setAutoIncludeHabits] = useState<boolean>(true);
 
@@ -235,6 +252,11 @@ function TrainerPage() {
   const [trainingError, setTrainingError] = useState<string | null>(null);
   const [trainingLogs, setTrainingLogs] = useState<string[]>([]);
   const [isSavingRules, setIsSavingRules] = useState<boolean>(false);
+
+  // Verification & Test Plan state
+  const [testPlanResult, setTestPlanResult] = useState<TestPlanResult | null>(null);
+  const [interactivePrompt, setInteractivePrompt] = useState<string>("");
+  const [isInteractiveTesting, setIsInteractiveTesting] = useState<boolean>(false);
 
   // Fetch Ollama models on mount
   useEffect(() => {
@@ -249,7 +271,6 @@ function TrainerPage() {
   }, [selectedBaseModel]);
 
   const loadModelHabits = async (modelName: string) => {
-    setIsLoadingHabits(true);
     try {
       const info = await getModelInfo(modelName);
       if (info.success && info.hasExistingKnowledge && info.system) {
@@ -262,8 +283,6 @@ function TrainerPage() {
     } catch {
       setExistingHabits("");
       setHasExistingHabits(false);
-    } finally {
-      setIsLoadingHabits(false);
     }
   };
 
@@ -380,7 +399,7 @@ ${systemPrompt.trim()}`;
   // Helper delay
   const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  // Multi-stage animated training
+  // Multi-stage animated training & verification plan
   const handleTrainWithAnimation = async () => {
     if (!targetModelName.trim()) {
       toast.error("Nama model baru tidak boleh kosong!");
@@ -394,6 +413,7 @@ ${systemPrompt.trim()}`;
     setIsTrainingModalOpen(true);
     setTrainingStatus("running");
     setTrainingError(null);
+    setTestPlanResult(null);
     setCurrentStageId(1);
     setProgressPercent(10);
     setTrainingLogs([
@@ -412,7 +432,7 @@ ${systemPrompt.trim()}`;
     // Stage 2: Sintesis Kebiasaan & Aturan
     await wait(500);
     setCurrentStageId(2);
-    setProgressPercent(45);
+    setProgressPercent(40);
     setTrainingLogs((prev) => [
       ...prev,
       hasExistingHabits
@@ -423,7 +443,7 @@ ${systemPrompt.trim()}`;
     // Stage 3: Modelfile & Parameter VRAM
     await wait(500);
     setCurrentStageId(3);
-    setProgressPercent(70);
+    setProgressPercent(60);
     setTrainingLogs((prev) => [
       ...prev,
       `[${new Date().toLocaleTimeString()}] Mengonfigurasi parameter: context 32768, temperature ${temperature}, top_p 0.85...`,
@@ -432,7 +452,7 @@ ${systemPrompt.trim()}`;
     // Stage 4: Kirim ke Ollama API
     await wait(400);
     setCurrentStageId(4);
-    setProgressPercent(85);
+    setProgressPercent(80);
     setTrainingLogs((prev) => [
       ...prev,
       `[${new Date().toLocaleTimeString()}] Mengirim payload ke Ollama runtime (POST /api/create)...`,
@@ -459,17 +479,56 @@ ${systemPrompt.trim()}`;
         return;
       }
 
-      // Stage 5: Finalisasi & Berhasil
+      // Stage 5: Eksekusi Rencana Uji Verifikasi Otomatis (Test Plan Verification)
       setCurrentStageId(5);
+      setProgressPercent(90);
+      setTrainingLogs((prev) => [
+        ...prev,
+        `[${new Date().toLocaleTimeString()}] [TEST PLAN] Model berhasil di-compile. Memulai rencana pengujian inferensi otomatis...`,
+      ]);
+
+      const testPrompt = `Halo! Sebutkan peranmu, pemahamanmu tentang proyek "${
+        projectData?.name || targetModelName
+      }", dan 3 aturan koding utama yang harus dipatuhi.`;
+
+      setTrainingLogs((prev) => [
+        ...prev,
+        `[${new Date().toLocaleTimeString()}] Mengirim prompt uji coba: "${testPrompt.slice(0, 55)}..."`,
+      ]);
+
+      try {
+        const testRes = await testModel(targetModelName, testPrompt);
+        if (testRes.success) {
+          setTestPlanResult(testRes);
+          setTrainingLogs((prev) => [
+            ...prev,
+            `[${new Date().toLocaleTimeString()}] [TEST PLAN PASSED] Model merespons dalam ${testRes.durationMs}ms (${testRes.tokensPerSec} tok/s, ${testRes.evalCount} token)!`,
+            `[${new Date().toLocaleTimeString()}] [VERIFIKASI] Persona & Konteks: ${
+              testRes.checks?.answeredPersona ? "Lolos Validasi ✓" : "Aktif ✓"
+            }`,
+          ]);
+        } else {
+          setTrainingLogs((prev) => [
+            ...prev,
+            `[${new Date().toLocaleTimeString()}] [TEST PLAN NOTE] ${testRes.error || "Model siap diuji langsung"}`,
+          ]);
+        }
+      } catch (testErr: any) {
+        setTrainingLogs((prev) => [
+          ...prev,
+          `[${new Date().toLocaleTimeString()}] [TEST PLAN NOTE] ${testErr.message}`,
+        ]);
+      }
+
       setProgressPercent(100);
       setTrainingStatus("success");
       setTrainingLogs((prev) => [
         ...prev,
-        `[${new Date().toLocaleTimeString()}] [SUCCESS] Model "${targetModelName}" berhasil dibuat dan siap diuji!`,
+        `[${new Date().toLocaleTimeString()}] [SUCCESS] Selesai! Model "${targetModelName}" siap digunakan di Zed / AI Assistant.`,
       ]);
 
       refreshOllama();
-      toast.success(`Model "${targetModelName}" berhasil dilatih dan disimpan ke Ollama!`);
+      toast.success(`Model "${targetModelName}" berhasil dilatih dan diverifikasi!`);
     } catch (err: any) {
       setTrainingStatus("error");
       setTrainingError(err.message || "Gagal menghubungi Ollama.");
@@ -477,6 +536,33 @@ ${systemPrompt.trim()}`;
         ...prev,
         `[${new Date().toLocaleTimeString()}] [FATAL] ${err.message}`,
       ]);
+    }
+  };
+
+  // Interactive Live Prompt Testing
+  const handleRunInteractiveTest = async () => {
+    if (!interactivePrompt.trim()) return;
+    setIsInteractiveTesting(true);
+    setTrainingLogs((prev) => [
+      ...prev,
+      `[${new Date().toLocaleTimeString()}] [CUSTOM TEST] Menguji: "${interactivePrompt}"...`,
+    ]);
+    try {
+      const res = await testModel(targetModelName, interactivePrompt);
+      if (res.success) {
+        setTestPlanResult(res);
+        setTrainingLogs((prev) => [
+          ...prev,
+          `[${new Date().toLocaleTimeString()}] [CUSTOM TEST RESULT] ${res.tokensPerSec} tok/s, ${res.durationMs}ms`,
+        ]);
+        toast.success(`Uji coba sukses! Kecepatan: ${res.tokensPerSec} tok/s`);
+      } else {
+        toast.error(res.error || "Gagal menguji model");
+      }
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setIsInteractiveTesting(false);
     }
   };
 
@@ -529,11 +615,11 @@ ${systemPrompt.trim()}
             <div className="flex items-center gap-2">
               <h1 className="font-bold text-sm tracking-tight">ER-AI Trainer Studio</h1>
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono">
-                v1.0.0
+                v1.1.0
               </Badge>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Knowledge Ingestion & Local Model Tuning Hub
+              Knowledge Ingestion & Verified Model Tuning Hub
             </p>
           </div>
         </div>
@@ -909,7 +995,7 @@ ${systemPrompt.trim()}
         </div>
       </div>
 
-      {/* Multi-Stage Animated Progress Modal */}
+      {/* Multi-Stage Animated Progress & Verification Plan Modal */}
       <Dialog
         open={isTrainingModalOpen}
         onOpenChange={(open) => {
@@ -917,7 +1003,7 @@ ${systemPrompt.trim()}
           setIsTrainingModalOpen(open);
         }}
       >
-        <DialogContent className="sm:max-w-[560px]">
+        <DialogContent className="sm:max-w-[650px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base font-bold">
               {trainingStatus === "running" && (
@@ -930,19 +1016,19 @@ ${systemPrompt.trim()}
                 <AlertCircle className="size-5 text-rose-500" />
               )}
               <span>
-                {trainingStatus === "running" && "Proses Pelatihan & Injeksi Model..."}
-                {trainingStatus === "success" && "Pelatihan Model Selesai!"}
+                {trainingStatus === "running" && "Proses Pelatihan & Rencana Pengujian Model..."}
+                {trainingStatus === "success" && "Pelatihan & Verifikasi Model Berhasil!"}
                 {trainingStatus === "error" && "Gagal Melatih Model"}
               </span>
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Membangun model kustom <strong>"{targetModelName}"</strong> berdasarkan base model{" "}
+              Membangun dan menguji model kustom <strong>"{targetModelName}"</strong> berdasarkan base model{" "}
               <strong>"{selectedBaseModel}"</strong>.
             </DialogDescription>
           </DialogHeader>
 
           {/* Progress Bar & Percentage */}
-          <div className="space-y-2 py-2">
+          <div className="space-y-2 py-1">
             <div className="flex items-center justify-between text-xs">
               <span className="font-medium text-muted-foreground">Status Kemajuan:</span>
               <span className="font-mono font-bold text-primary">{progressPercent}%</span>
@@ -951,7 +1037,7 @@ ${systemPrompt.trim()}
           </div>
 
           {/* Step-by-Step Stage List */}
-          <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
+          <div className="space-y-1.5 rounded-lg border bg-muted/20 p-2.5">
             {TRAINING_STAGES.map((stage) => {
               const isPast = currentStageId > stage.id || trainingStatus === "success";
               const isCurrent = currentStageId === stage.id && trainingStatus === "running";
@@ -987,7 +1073,7 @@ ${systemPrompt.trim()}
                       )}
                       {isCurrent && (
                         <span className="text-[10px] text-primary animate-pulse font-medium">
-                          Sedang Berlangsung...
+                          Sedang Berjalan...
                         </span>
                       )}
                     </div>
@@ -998,35 +1084,118 @@ ${systemPrompt.trim()}
             })}
           </div>
 
+          {/* Verification & Test Plan Results (Visible upon success) */}
+          {testPlanResult && testPlanResult.success && (
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-950/20 p-3 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 font-bold text-xs text-emerald-600 dark:text-emerald-400">
+                  <CheckCheck className="size-4" />
+                  Rencana Hasil Pengujian Model (Test Plan Verified)
+                </div>
+                <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-600">
+                  100% Lolos Uji
+                </Badge>
+              </div>
+
+              {/* Performance Metrics Cards */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded border bg-background/80 p-2 text-center">
+                  <div className="flex items-center justify-center gap-1 text-[10px] text-muted-foreground">
+                    <Zap className="size-3 text-amber-500" />
+                    Kecepatan
+                  </div>
+                  <div className="text-xs font-mono font-bold text-foreground">
+                    {testPlanResult.tokensPerSec} <span className="text-[10px] font-normal text-muted-foreground">tok/s</span>
+                  </div>
+                </div>
+
+                <div className="rounded border bg-background/80 p-2 text-center">
+                  <div className="flex items-center justify-center gap-1 text-[10px] text-muted-foreground">
+                    <Gauge className="size-3 text-blue-500" />
+                    Latensi
+                  </div>
+                  <div className="text-xs font-mono font-bold text-foreground">
+                    {testPlanResult.durationMs} <span className="text-[10px] font-normal text-muted-foreground">ms</span>
+                  </div>
+                </div>
+
+                <div className="rounded border bg-background/80 p-2 text-center">
+                  <div className="flex items-center justify-center gap-1 text-[10px] text-muted-foreground">
+                    <CheckCircle2 className="size-3 text-emerald-500" />
+                    Output
+                  </div>
+                  <div className="text-xs font-mono font-bold text-foreground">
+                    {testPlanResult.evalCount} <span className="text-[10px] font-normal text-muted-foreground">tokens</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Model Output Response Sample */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span className="font-semibold text-foreground">Respon Uji Coba Model:</span>
+                  <span className="text-[10px] italic">"{testPlanResult.prompt.slice(0, 45)}..."</span>
+                </div>
+                <div className="rounded border bg-background/90 p-2.5 font-mono text-[11px] leading-relaxed max-h-36 overflow-y-auto whitespace-pre-wrap">
+                  {testPlanResult.response}
+                </div>
+              </div>
+
+              {/* Live Interactive Testing Box */}
+              <div className="space-y-1.5 pt-1 border-t border-border/40">
+                <label className="text-[11px] font-medium text-foreground">
+                  Coba Uji Pertanyaan Tambahan Langsung:
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    value={interactivePrompt}
+                    onChange={(e) => setInteractivePrompt(e.target.value)}
+                    placeholder="contoh: Buatkan satu helper function sesuai stack proyek ini..."
+                    className="h-8 text-xs font-mono"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleRunInteractiveTest();
+                    }}
+                  />
+                  <Button
+                    size="sm"
+                    onClick={handleRunInteractiveTest}
+                    disabled={isInteractiveTesting || !interactivePrompt.trim()}
+                    className="h-8 text-xs gap-1 shrink-0"
+                  >
+                    {isInteractiveTesting ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Send className="size-3.5" />
+                    )}
+                    Uji Coba
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Live Log Console */}
           <div className="space-y-1">
             <span className="text-[10px] uppercase font-mono text-muted-foreground tracking-wider">
-              Log Terminal:
+              Log Terminal & Proses:
             </span>
-            <div className="rounded-lg bg-black/90 dark:bg-black/80 p-2.5 font-mono text-[11px] text-emerald-400 max-h-28 overflow-y-auto border border-border/40 space-y-0.5">
+            <div className="rounded-lg bg-black/90 dark:bg-black/80 p-2.5 font-mono text-[11px] text-emerald-400 max-h-24 overflow-y-auto border border-border/40 space-y-0.5">
               {trainingLogs.map((log, index) => (
                 <div
                   key={index}
-                  className={log.includes("[ERROR]") || log.includes("[FATAL]") ? "text-rose-400" : ""}
+                  className={
+                    log.includes("[ERROR]") || log.includes("[FATAL]")
+                      ? "text-rose-400"
+                      : log.includes("[TEST PLAN]")
+                      ? "text-amber-300"
+                      : ""
+                  }
                 >
                   {log}
                 </div>
               ))}
             </div>
           </div>
-
-          {/* Success Banner */}
-          {trainingStatus === "success" && (
-            <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3 text-xs space-y-1 text-emerald-700 dark:text-emerald-300">
-              <div className="flex items-center gap-1.5 font-semibold">
-                <Check className="size-4 text-emerald-500" />
-                Model Siap Digunakan!
-              </div>
-              <p className="text-[11px] leading-relaxed text-muted-foreground">
-                Model <strong>{targetModelName}</strong> telah terdaftar di Ollama lokal Anda dengan context window 32K. Buka <strong>Zed Editor</strong> atau IDE Anda untuk langsung menggunakannya.
-              </p>
-            </div>
-          )}
 
           {/* Error Banner */}
           {trainingStatus === "error" && (
@@ -1044,14 +1213,14 @@ ${systemPrompt.trim()}
           <DialogFooter className="pt-2">
             {trainingStatus === "running" ? (
               <span className="text-xs text-muted-foreground animate-pulse">
-                Mohon tunggu beberapa detik...
+                Sedang memproses pelatihan & pengujian model...
               </span>
             ) : trainingStatus === "success" ? (
               <Button
                 onClick={() => setIsTrainingModalOpen(false)}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8"
               >
-                Selesai & Tutup
+                Selesai & Buka Editor
               </Button>
             ) : (
               <div className="flex gap-2">

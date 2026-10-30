@@ -32,3 +32,7 @@ export async function trainModel(params: {
 export async function saveProjectRules(projectPath: string, rulesContent: string) {
   return await ipc.client.trainer.saveProjectRules({ projectPath, rulesContent });
 }
+
+export async function testModel(modelName: string, testPrompt?: string) {
+  return await ipc.client.trainer.testModel({ modelName, testPrompt });
+}

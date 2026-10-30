@@ -22,3 +22,8 @@ export const saveProjectRulesInputSchema = z.object({
   projectPath: z.string().min(1),
   rulesContent: z.string().min(1),
 });
+
+export const testModelInputSchema = z.object({
+  modelName: z.string().min(1),
+  testPrompt: z.string().optional(),
+});
