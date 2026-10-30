@@ -21,22 +21,14 @@ import {
   BrainCircuit,
   Loader2,
   Clock,
-  Check,
-  X,
-  ChevronDown,
-  ChevronUp,
-  Send,
-  Zap,
-  Gauge,
-  CheckCheck,
-  SlidersHorizontal,
-  PenTool,
   EyeOff,
   Eye,
   Trash2,
   Play,
-  FileText,
+  Zap,
+  Gauge,
   ListOrdered,
+  PenTool,
 } from "lucide-react";
 import {
   addProjectsToQueue,
@@ -51,16 +43,26 @@ import {
   selectMultipleFolders,
   testModel,
   toggleIgnoreProject,
-  trainModel,
 } from "@/actions/trainer";
 import type { ProjectAnalysis } from "@/ipc/trainer/handlers";
 import type { ProjectRecord } from "@/ipc/db/database";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -77,6 +79,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import ToggleTheme from "@/components/toggle-theme";
+import DragWindowRegion from "@/components/drag-window-region";
 
 interface TemplateItem {
   id: string;
@@ -245,10 +248,10 @@ function TrainerPage() {
 
   // SQLite Batch Queue State
   const [projectQueue, setProjectQueue] = useState<ProjectRecord[]>([]);
-  const [activeProject, setActiveProject] = useState<ProjectRecord | null>(null);
+  const [, setActiveProject] = useState<ProjectRecord | null>(null);
 
   const [projectPath, setProjectPath] = useState<string>("");
-  const [isScanning, setIsScanning] = useState<boolean>(false);
+  const [, setIsScanning] = useState<boolean>(false);
   const [projectData, setProjectData] = useState<ProjectAnalysis | null>(null);
 
   const [selectedBaseModel, setSelectedBaseModel] = useState<string>("er-ai:latest");
@@ -264,7 +267,6 @@ function TrainerPage() {
   // Existing habits / knowledge state
   const [existingHabits, setExistingHabits] = useState<string>("");
   const [hasExistingHabits, setHasExistingHabits] = useState<boolean>(false);
-  const [showHabitDetail, setShowHabitDetail] = useState<boolean>(false);
   const [autoIncludeHabits, setAutoIncludeHabits] = useState<boolean>(true);
 
   // Batch Training Queue Execution State
@@ -278,14 +280,11 @@ function TrainerPage() {
   const [currentStageId, setCurrentStageId] = useState<number>(1);
   const [progressPercent, setProgressPercent] = useState<number>(0);
   const [trainingStatus, setTrainingStatus] = useState<"idle" | "running" | "success" | "error">("idle");
-  const [trainingError, setTrainingError] = useState<string | null>(null);
   const [trainingLogs, setTrainingLogs] = useState<string[]>([]);
   const [isSavingRules, setIsSavingRules] = useState<boolean>(false);
 
   // Verification & Test Plan state
   const [testPlanResult, setTestPlanResult] = useState<TestPlanResult | null>(null);
-  const [interactivePrompt, setInteractivePrompt] = useState<string>("");
-  const [isInteractiveTesting, setIsInteractiveTesting] = useState<boolean>(false);
 
   // AI Analysis View Modal State
   const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState<boolean>(false);
@@ -365,9 +364,8 @@ function TrainerPage() {
       toast.info(`Menambahkan ${res.paths.length} proyek ke antrean...`);
       const updated = await addProjectsToQueue(res.paths);
       setProjectQueue(updated);
-      toast.success(`${res.paths.length} folder proyek berhasil ditambahkan ke database!`);
+      toast.success(`${res.paths.length} folder proyek berhasil ditambahkan ke antrean!`);
 
-      // If no active project, pick the first added
       if (!projectPath && res.paths[0]) {
         setProjectPath(res.paths[0]);
         performScan(res.paths[0]);
@@ -390,7 +388,7 @@ function TrainerPage() {
     setProjectQueue(updated);
     toast.info(
       newIgnored
-        ? `Proyek "${project.project_name}" di-ignore (akan dilewati antrean)`
+        ? `Proyek "${project.project_name}" diabaikan (dilewati saat batch)`
         : `Proyek "${project.project_name}" diaktifkan kembali`
     );
   };
@@ -420,7 +418,6 @@ function TrainerPage() {
         .slice(0, 20);
       setTargetModelName(`er-ai-${safeProjectName}`);
 
-      // Generate prompt combining personal habits with template
       applyTemplateWithHabits(selectedTemplate, data, hasExistingHabits && autoIncludeHabits);
       toast.success(`Berhasil menganalisis "${data.name}"!`);
       setActiveMobileView("editor");
@@ -464,7 +461,6 @@ ${projectContent.trim()}`;
     }
   };
 
-  // Helper delay
   const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
   // Sequential Batch Training Execution
@@ -484,7 +480,6 @@ ${projectContent.trim()}`;
     setBatchTotalCount(targetQueue.length);
     setIsTrainingModalOpen(true);
     setTrainingStatus("running");
-    setTrainingError(null);
     setTrainingLogs([
       `[${new Date().toLocaleTimeString()}] Memulai pemrosesan bertahap ${targetQueue.length} proyek...`,
     ]);
@@ -493,7 +488,7 @@ ${projectContent.trim()}`;
       const item = targetQueue[i];
       setBatchCurrentIndex(i + 1);
       setCurrentStageId(1);
-      setProgressPercent(Math.round(((i) / targetQueue.length) * 100));
+      setProgressPercent(Math.round((i / targetQueue.length) * 100));
 
       setTrainingLogs((prev) => [
         ...prev,
@@ -532,7 +527,6 @@ ${projectContent.trim()}`;
             `[${new Date().toLocaleTimeString()}] [AI ANALISIS SELESAI] Analisa arsitektur disimpan ke database SQLite.`,
           ]);
 
-          // Update active test result preview
           if (result.aiAnalysis) {
             setTestPlanResult({
               success: true,
@@ -567,33 +561,6 @@ ${projectContent.trim()}`;
     setIsBatchProcessing(false);
     refreshOllama();
     toast.success(`Pemrosesan ${targetQueue.length} proyek selesai!`);
-  };
-
-  // Interactive Live Prompt Testing
-  const handleRunInteractiveTest = async () => {
-    if (!interactivePrompt.trim()) return;
-    setIsInteractiveTesting(true);
-    setTrainingLogs((prev) => [
-      ...prev,
-      `[${new Date().toLocaleTimeString()}] [CUSTOM TEST] Menguji: "${interactivePrompt}"...`,
-    ]);
-    try {
-      const res = await testModel(targetModelName, interactivePrompt);
-      if (res.success) {
-        setTestPlanResult(res);
-        setTrainingLogs((prev) => [
-          ...prev,
-          `[${new Date().toLocaleTimeString()}] [HASIL UJI] ${res.tokensPerSec} tok/s, ${res.durationMs}ms`,
-        ]);
-        toast.success(`Uji coba sukses! Kecepatan: ${res.tokensPerSec} tok/s`);
-      } else {
-        toast.error(res.error || "Gagal menguji model");
-      }
-    } catch (err: any) {
-      toast.error(err.message);
-    } finally {
-      setIsInteractiveTesting(false);
-    }
   };
 
   // Open AI Analysis Modal for a project
@@ -637,30 +604,29 @@ ${systemPrompt.trim()}
 """
 `;
     navigator.clipboard.writeText(content);
-    toast.success("Isi Modelfile berhasil disalin ke clipboard!");
+    toast.success("Isi Modelfile disalin ke clipboard!");
   };
 
   // Queue Statistics
   const totalCount = projectQueue.length;
   const completedCount = projectQueue.filter((p) => p.status === "completed").length;
-  const ignoredCount = projectQueue.filter((p) => p.is_ignored === 1).length;
   const pendingCount = projectQueue.filter(
     (p) => p.is_ignored === 0 && p.status !== "completed"
   ).length;
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden bg-background text-foreground">
-      {/* Top Application Header */}
-      <header className="flex h-13 shrink-0 items-center justify-between border-b border-border/70 bg-card/60 backdrop-blur px-3 sm:px-4">
-        <div className="flex items-center gap-2.5">
-          <div className="flex size-7 items-center justify-center rounded-lg bg-teal-500/15 border border-teal-500/30 text-teal-600 dark:text-teal-400 shadow-sm">
-            <BrainCircuit className="size-4" />
-          </div>
-          <div>
+    <div className="flex flex-1 flex-col h-screen overflow-hidden bg-background text-foreground">
+      {/* Sleek Unified Application Titlebar Header */}
+      <DragWindowRegion
+        title={
+          <div className="flex items-center gap-2.5">
+            <div className="flex size-7 items-center justify-center rounded-lg bg-teal-500/10 border border-teal-500/30 text-teal-600 dark:text-teal-400">
+              <BrainCircuit className="size-4" />
+            </div>
             <div className="flex items-center gap-2">
-              <h1 className="font-bold text-xs sm:text-sm tracking-tight text-foreground">
+              <span className="font-semibold text-xs tracking-tight text-foreground">
                 ER-AI Trainer Studio
-              </h1>
+              </span>
               <Badge
                 variant="outline"
                 className="hidden sm:inline-flex text-[10px] px-1.5 py-0 font-mono border-teal-500/30 text-teal-600 dark:text-teal-400 bg-teal-500/5"
@@ -668,91 +634,85 @@ ${systemPrompt.trim()}
                 SQLite Ingestion Hub
               </Badge>
             </div>
-            <p className="text-[10px] text-muted-foreground hidden sm:block">
-              Multi-Project Sequential Training & Architectural Insights
-            </p>
           </div>
+        }
+      >
+        {/* Responsive Mobile/Tablet Switcher (Visible on < lg) */}
+        <div className="flex lg:hidden mr-1">
+          <Tabs
+            value={activeMobileView}
+            onValueChange={(val) => setActiveMobileView(val as "queue" | "editor")}
+          >
+            <TabsList className="h-7 p-0.5 bg-muted/60">
+              <TabsTrigger
+                value="queue"
+                className="text-[11px] px-2 py-0.5 gap-1.5 data-[state=active]:bg-background data-[state=active]:text-teal-600 dark:data-[state=active]:text-teal-400"
+              >
+                <ListOrdered className="size-3" />
+                <span>Antrean ({totalCount})</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="editor"
+                className="text-[11px] px-2 py-0.5 gap-1.5 data-[state=active]:bg-background data-[state=active]:text-teal-600 dark:data-[state=active]:text-teal-400"
+              >
+                <PenTool className="size-3" />
+                <span>Editor & Latih</span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
 
-        {/* Responsive Navigation Toggle for screens < lg */}
-        <div className="flex lg:hidden items-center rounded-lg border border-border/60 bg-muted/40 p-0.5 text-xs">
-          <button
-            type="button"
-            onClick={() => setActiveMobileView("queue")}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-all font-medium text-[11px] ${
-              activeMobileView === "queue"
-                ? "bg-card text-teal-600 dark:text-teal-400 shadow-sm border border-teal-500/20"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <ListOrdered className="size-3" />
-            <span>Antrean ({totalCount})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveMobileView("editor")}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-all font-medium text-[11px] ${
-              activeMobileView === "editor"
-                ? "bg-card text-teal-600 dark:text-teal-400 shadow-sm border border-teal-500/20"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <PenTool className="size-3" />
-            <span>Editor & Latih</span>
-          </button>
-        </div>
-
-        {/* Ollama Status Indicator & Theme Toggle */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div
-            className={`flex items-center gap-1.5 rounded-full px-2 sm:px-2.5 py-0.5 sm:py-1 text-[11px] sm:text-xs font-medium border ${
-              ollamaStatus.online
-                ? "bg-teal-500/10 text-teal-700 dark:text-teal-300 border-teal-500/30"
-                : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
-            }`}
-          >
-            <span
-              className={`size-2 rounded-full ${
-                ollamaStatus.online ? "bg-teal-500 animate-pulse" : "bg-rose-500"
-              }`}
-            />
-            <span className="hidden sm:inline">
-              {ollamaStatus.online
-                ? `Ollama Aktif (${ollamaStatus.models.length} model)`
-                : "Ollama Offline"}
-            </span>
-            <span className="inline sm:hidden">
-              {ollamaStatus.online ? "Aktif" : "Offline"}
-            </span>
-          </div>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={refreshOllama}
-            className="size-7 sm:size-8 text-muted-foreground hover:text-teal-500"
-            title="Refresh Ollama Models"
-          >
-            <RefreshCw className="size-3.5 sm:size-4" />
-          </Button>
-
-          <ToggleTheme />
-        </div>
-      </header>
-
-      {/* Main Responsive Grid Body */}
-      <div className="flex flex-1 overflow-hidden p-2.5 sm:p-4 gap-3 lg:gap-4 flex-col lg:flex-row">
-        {/* Left Column: SQLite Multi-Project Queue & Config */}
+        {/* Ollama Status Badge */}
         <div
-          className={`w-full lg:w-[380px] xl:w-[420px] shrink-0 flex-col gap-3 overflow-y-auto pr-0 lg:pr-1 ${
+          className={`flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium border ${
+            ollamaStatus.online
+              ? "bg-teal-500/10 text-teal-700 dark:text-teal-300 border-teal-500/30"
+              : "bg-destructive/10 text-destructive border-destructive/20"
+          }`}
+        >
+          <span
+            className={`size-2 rounded-full ${
+              ollamaStatus.online ? "bg-teal-500 animate-pulse" : "bg-destructive"
+            }`}
+          />
+          <span className="hidden sm:inline">
+            {ollamaStatus.online
+              ? `Ollama Aktif (${ollamaStatus.models.length} model)`
+              : "Ollama Offline"}
+          </span>
+          <span className="inline sm:hidden">
+            {ollamaStatus.online ? "Aktif" : "Offline"}
+          </span>
+        </div>
+
+        {/* Refresh Ollama Models Button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={refreshOllama}
+          className="size-7 text-muted-foreground hover:text-teal-500"
+          title="Segarkan Model Ollama"
+        >
+          <RefreshCw className="size-3.5" />
+        </Button>
+
+        {/* Dark/Light Theme Switcher */}
+        <ToggleTheme />
+      </DragWindowRegion>
+
+      {/* Main Responsive Grid Layout */}
+      <div className="flex flex-1 overflow-hidden p-3 sm:p-4 gap-3 lg:gap-4 flex-col lg:flex-row">
+        {/* Left Column: SQLite Multi-Project Queue & Parameters */}
+        <div
+          className={`w-full lg:w-[380px] xl:w-[420px] shrink-0 flex flex-col gap-3 overflow-hidden ${
             activeMobileView === "queue" ? "flex" : "hidden lg:flex"
           }`}
         >
-          {/* Card: Project Queue & Folder Adder */}
-          <Card className="border-border/70 bg-card/80 shadow-sm backdrop-blur-sm transition-all hover:border-teal-500/30">
-            <CardHeader className="pb-2.5 pt-3.5 px-3.5 sm:px-4">
+          {/* Card: SQLite Multi-Project Queue */}
+          <Card className="flex flex-1 flex-col overflow-hidden">
+            <CardHeader className="pb-3 border-b border-border bg-muted/10">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-[10px] sm:text-[11px] font-mono tracking-widest uppercase text-muted-foreground flex items-center gap-1.5">
+                <CardTitle className="text-xs font-mono tracking-wider uppercase text-muted-foreground flex items-center gap-1.5">
                   <Database className="size-3.5 text-teal-500" />
                   Antrean Proyek (SQLite)
                 </CardTitle>
@@ -765,11 +725,11 @@ ${systemPrompt.trim()}
               </div>
 
               {/* Action buttons to add folder(s) */}
-              <div className="flex gap-2 pt-2">
+              <div className="flex gap-2 pt-1">
                 <Button
                   onClick={handlePickMultipleFolders}
                   size="sm"
-                  className="flex-1 gap-1.5 h-8 text-xs bg-teal-600 hover:bg-teal-500 text-white font-medium shadow-sm"
+                  className="flex-1 gap-1.5 h-8 text-xs bg-teal-600 hover:bg-teal-500 text-white font-medium shadow-xs"
                 >
                   <FolderPlus className="size-3.5" />
                   + Tambah Banyak Proyek
@@ -778,7 +738,7 @@ ${systemPrompt.trim()}
                   onClick={handlePickFolder}
                   variant="outline"
                   size="sm"
-                  className="gap-1 h-8 text-xs border-border/80 hover:border-teal-500/40"
+                  className="gap-1 h-8 text-xs hover:border-teal-500/40"
                   title="Pilih satu folder"
                 >
                   <FolderOpen className="size-3.5" />
@@ -787,10 +747,10 @@ ${systemPrompt.trim()}
               </div>
             </CardHeader>
 
-            <CardContent className="space-y-2.5 px-3.5 sm:px-4 pb-3.5">
-              {/* Batch Queue Processing Trigger */}
+            <CardContent className="flex flex-1 flex-col overflow-hidden p-3 gap-2.5">
+              {/* Batch Processing Execution Control */}
               {projectQueue.length > 0 && (
-                <div className="rounded-lg border border-teal-500/30 bg-teal-500/5 dark:bg-teal-950/20 p-2.5 space-y-2">
+                <div className="rounded-lg border border-teal-500/30 bg-teal-500/5 dark:bg-teal-950/20 p-2.5 space-y-2 shrink-0">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-semibold text-teal-700 dark:text-teal-300 flex items-center gap-1">
                       <Rocket className="size-3.5 text-teal-500" />
@@ -801,17 +761,19 @@ ${systemPrompt.trim()}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground select-none">
-                    <input
-                      type="checkbox"
+                  <div className="flex items-center gap-2">
+                    <Switch
                       id="skipTrained"
+                      size="sm"
                       checked={skipAlreadyTrained}
-                      onChange={(e) => setSkipAlreadyTrained(e.target.checked)}
-                      className="rounded border-border accent-teal-600"
+                      onCheckedChange={setSkipAlreadyTrained}
                     />
-                    <label htmlFor="skipTrained" className="cursor-pointer">
+                    <Label
+                      htmlFor="skipTrained"
+                      className="text-xs text-muted-foreground font-normal cursor-pointer select-none"
+                    >
                       Lewati yang sudah dilatihkan
-                    </label>
+                    </Label>
                   </div>
 
                   <Button
@@ -834,149 +796,145 @@ ${systemPrompt.trim()}
                 </div>
               )}
 
-              {/* Project Queue List (Scrollable) */}
-              <div className="space-y-1.5 max-h-[320px] overflow-y-auto pr-0.5">
+              {/* Scrollable Project List */}
+              <ScrollArea className="flex-1 w-full rounded-md border border-border p-1">
                 {projectQueue.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-border/70 p-4 text-center text-xs text-muted-foreground space-y-1">
+                  <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground space-y-1">
                     <p className="font-medium text-foreground">Belum ada proyek dalam antrean</p>
                     <p className="text-[11px]">
                       Klik tombol di atas untuk memilih satu atau banyak folder proyek sekaligus.
                     </p>
                   </div>
                 ) : (
-                  projectQueue.map((item) => {
-                    const isSelected = projectPath === item.project_path;
-                    const isIgnored = item.is_ignored === 1;
-                    const isCompleted = item.status === "completed";
-                    const isTraining = item.status === "training";
+                  <div className="space-y-1.5 p-0.5">
+                    {projectQueue.map((item) => {
+                      const isSelected = projectPath === item.project_path;
+                      const isIgnored = item.is_ignored === 1;
+                      const isCompleted = item.status === "completed";
+                      const isTraining = item.status === "training";
 
-                    return (
-                      <div
-                        key={item.project_path}
-                        onClick={() => handleSelectFromQueue(item)}
-                        className={`group relative rounded-lg border p-2.5 text-xs transition-all cursor-pointer ${
-                          isSelected
-                            ? "border-teal-500 bg-teal-500/10 shadow-sm"
-                            : isIgnored
-                            ? "border-border/40 bg-muted/20 opacity-60"
-                            : "border-border/70 bg-card hover:border-teal-500/40 hover:bg-muted/30"
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-1.5">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5">
-                              <span
-                                className={`font-semibold truncate ${
-                                  isIgnored ? "line-through text-muted-foreground" : "text-foreground"
-                                }`}
-                              >
-                                {item.project_name}
-                              </span>
-
-                              {/* Status Badges */}
-                              {isCompleted && (
-                                <Badge className="h-4 px-1 text-[9px] bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                                  ✓ Terlatih
-                                </Badge>
-                              )}
-                              {isTraining && (
-                                <Badge className="h-4 px-1 text-[9px] bg-teal-500/15 text-teal-600 dark:text-teal-400 border border-teal-500/30 animate-pulse">
-                                  Melatih...
-                                </Badge>
-                              )}
-                              {isIgnored && (
-                                <Badge
-                                  variant="outline"
-                                  className="h-4 px-1 text-[9px] text-muted-foreground border-border"
+                      return (
+                        <div
+                          key={item.project_path}
+                          onClick={() => handleSelectFromQueue(item)}
+                          className={`group rounded-lg border p-2.5 text-xs transition-colors cursor-pointer ${
+                            isSelected
+                              ? "border-teal-500 bg-teal-500/10 shadow-xs"
+                              : isIgnored
+                              ? "border-border/40 bg-muted/20 opacity-60"
+                              : "border-border bg-card hover:border-teal-500/40 hover:bg-muted/40"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-1.5">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <span
+                                  className={`font-semibold truncate ${
+                                    isIgnored ? "line-through text-muted-foreground" : "text-foreground"
+                                  }`}
                                 >
-                                  Di-Ignore
-                                </Badge>
-                              )}
+                                  {item.project_name}
+                                </span>
+
+                                {isCompleted && (
+                                  <Badge className="h-4 px-1 text-[9px] bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                                    ✓ Terlatih
+                                  </Badge>
+                                )}
+                                {isTraining && (
+                                  <Badge className="h-4 px-1 text-[9px] bg-teal-500/15 text-teal-600 dark:text-teal-400 border border-teal-500/30 animate-pulse">
+                                    Melatih...
+                                  </Badge>
+                                )}
+                                {isIgnored && (
+                                  <Badge
+                                    variant="outline"
+                                    className="h-4 px-1 text-[9px] text-muted-foreground border-border"
+                                  >
+                                    Di-Ignore
+                                  </Badge>
+                                )}
+                              </div>
+
+                              <p className="text-[10px] text-muted-foreground font-mono truncate mt-0.5">
+                                {item.project_path}
+                              </p>
                             </div>
 
-                            <p className="text-[10px] text-muted-foreground font-mono truncate mt-0.5">
-                              {item.project_path}
-                            </p>
-                          </div>
+                            {/* Action Buttons */}
+                            <div className="flex items-center gap-1 shrink-0">
+                              {item.ai_analysis && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={(e) => handleOpenAiAnalysis(item, e)}
+                                  className="size-6 text-teal-600 dark:text-teal-400 hover:bg-teal-500/20"
+                                  title="Lihat Laporan Analisa AI"
+                                >
+                                  <Sparkles className="size-3" />
+                                </Button>
+                              )}
 
-                          {/* Action Buttons for this item */}
-                          <div className="flex items-center gap-1 shrink-0">
-                            {/* AI Analysis View button (if analyzed) */}
-                            {item.ai_analysis && (
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                onClick={(e) => handleOpenAiAnalysis(item, e)}
-                                className="size-6 text-teal-600 dark:text-teal-400 hover:bg-teal-500/20"
-                                title="Lihat Laporan Analisa AI"
+                                onClick={(e) => handleToggleIgnore(item, e)}
+                                className={`size-6 ${
+                                  isIgnored
+                                    ? "text-muted-foreground hover:text-teal-500"
+                                    : "text-muted-foreground hover:text-amber-500"
+                                }`}
+                                title={isIgnored ? "Aktifkan kembali" : "Abaikan / Ignore proyek ini"}
                               >
-                                <Sparkles className="size-3" />
+                                {isIgnored ? <Eye className="size-3" /> : <EyeOff className="size-3" />}
                               </Button>
-                            )}
 
-                            {/* Ignore toggle button */}
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={(e) => handleToggleIgnore(item, e)}
-                              className={`size-6 ${
-                                isIgnored
-                                  ? "text-muted-foreground hover:text-teal-500"
-                                  : "text-muted-foreground hover:text-amber-500"
-                              }`}
-                              title={isIgnored ? "Aktifkan kembali" : "Abaikan / Ignore proyek ini"}
-                            >
-                              {isIgnored ? <Eye className="size-3" /> : <EyeOff className="size-3" />}
-                            </Button>
-
-                            {/* Delete button */}
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={(e) => handleDeleteFromQueue(item, e)}
-                              className="size-6 text-muted-foreground hover:text-rose-500"
-                              title="Hapus dari database"
-                            >
-                              <Trash2 className="size-3" />
-                            </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={(e) => handleDeleteFromQueue(item, e)}
+                                className="size-6 text-muted-foreground hover:text-destructive"
+                                title="Hapus dari database"
+                              >
+                                <Trash2 className="size-3" />
+                              </Button>
+                            </div>
                           </div>
-                        </div>
 
-                        {/* Speed & Date Meta */}
-                        {isCompleted && item.trained_at && (
-                          <div className="flex items-center gap-2 pt-1 text-[10px] text-muted-foreground">
-                            <span>
-                              {new Date(item.trained_at).toLocaleDateString()} {new Date(item.trained_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                            </span>
-                            {item.tokens_per_sec > 0 && (
-                              <span className="font-mono text-teal-600 dark:text-teal-400">
-                                • {Math.round(item.tokens_per_sec)} tok/s
+                          {isCompleted && item.trained_at && (
+                            <div className="flex items-center gap-2 pt-1 text-[10px] text-muted-foreground">
+                              <span>
+                                {new Date(item.trained_at).toLocaleDateString()} {new Date(item.trained_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                               </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
+                              {item.tokens_per_sec > 0 && (
+                                <span className="font-mono text-teal-600 dark:text-teal-400">
+                                  • {Math.round(item.tokens_per_sec)} tok/s
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
-              </div>
+              </ScrollArea>
             </CardContent>
           </Card>
 
-          {/* Card: Model Target & Parameters */}
-          <Card className="border-border/70 bg-card/80 shadow-sm backdrop-blur-sm transition-all hover:border-teal-500/30">
+          {/* Card: Model Target & Hyperparameters */}
+          <Card className="shrink-0">
             <CardHeader className="pb-2.5 pt-3.5 px-3.5 sm:px-4">
-              <CardTitle className="text-[10px] sm:text-[11px] font-mono tracking-widest uppercase text-muted-foreground flex items-center gap-1.5">
+              <CardTitle className="text-xs font-mono tracking-wider uppercase text-muted-foreground flex items-center gap-1.5">
                 <Cpu className="size-3.5 text-teal-500" />
                 Target Model Ollama
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2.5 px-3.5 sm:px-4 pb-3.5">
-              {/* Base Model Select */}
               <div className="space-y-1">
-                <label className="text-[11px] font-medium text-muted-foreground">
+                <Label className="text-[11px] font-medium text-muted-foreground">
                   Pilih Model Dasar:
-                </label>
+                </Label>
                 <Select
                   value={selectedBaseModel}
                   onValueChange={(val) => setSelectedBaseModel(val)}
@@ -1000,11 +958,10 @@ ${systemPrompt.trim()}
                 </Select>
               </div>
 
-              {/* Target Model Name */}
               <div className="space-y-1">
-                <label className="text-[11px] font-medium text-muted-foreground">
+                <Label className="text-[11px] font-medium text-muted-foreground">
                   Nama Model Baru Hasil Latihan:
-                </label>
+                </Label>
                 <Input
                   value={targetModelName}
                   onChange={(e) => setTargetModelName(e.target.value)}
@@ -1013,12 +970,11 @@ ${systemPrompt.trim()}
                 />
               </div>
 
-              {/* Context Length & Temperature */}
-              <div className="grid grid-cols-2 gap-2 pt-1">
+              <div className="grid grid-cols-2 gap-2 pt-0.5">
                 <div className="space-y-1">
-                  <label className="text-[10px] text-muted-foreground font-mono">
+                  <Label className="text-[10px] text-muted-foreground font-mono">
                     Context Window:
-                  </label>
+                  </Label>
                   <Input
                     type="number"
                     value={contextLength}
@@ -1027,9 +983,9 @@ ${systemPrompt.trim()}
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] text-muted-foreground font-mono">
+                  <Label className="text-[10px] text-muted-foreground font-mono">
                     Temperature:
-                  </label>
+                  </Label>
                   <Input
                     type="number"
                     step="0.05"
@@ -1045,51 +1001,56 @@ ${systemPrompt.trim()}
           </Card>
         </div>
 
-        {/* Right Column: Templates, Prompt Editor & Action Bar */}
+        {/* Right Column: Templates, System Prompt Editor & Action Bar */}
         <div
           className={`flex flex-1 flex-col gap-3 overflow-hidden min-w-0 ${
             activeMobileView === "editor" ? "flex" : "hidden lg:flex"
           }`}
         >
-          <Card className="flex flex-1 flex-col overflow-hidden border-border/70 bg-card/80 shadow-sm backdrop-blur-sm transition-all">
-            <CardHeader className="pb-2.5 pt-3.5 px-3.5 sm:px-4 shrink-0 border-b border-border/60 bg-muted/10">
+          <Card className="flex flex-1 flex-col overflow-hidden">
+            <CardHeader className="pb-3 border-b border-border bg-muted/10 shrink-0">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <div className="flex items-center gap-2">
-                    <CardTitle className="text-xs sm:text-sm font-semibold flex items-center gap-1.5">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
                       <FileCode className="size-4 text-teal-500" />
                       Editor Instruksi & Pengetahuan
                     </CardTitle>
                     {projectData && (
-                      <Badge variant="outline" className="text-[10px] font-mono border-teal-500/30 text-teal-600">
+                      <Badge variant="outline" className="text-[10px] font-mono border-teal-500/30 text-teal-600 dark:text-teal-400">
                         {projectData.name}
                       </Badge>
                     )}
                   </div>
-                  <CardDescription className="text-[11px] sm:text-xs">
+                  <CardDescription className="text-xs mt-0.5">
                     Pilih template koding atau sesuaikan prompt sebelum model dilatihkan ke Ollama.
                   </CardDescription>
                 </div>
 
                 {hasExistingHabits && (
-                  <label className="flex items-center gap-1.5 text-[11px] sm:text-xs text-muted-foreground cursor-pointer select-none">
-                    <input
-                      type="checkbox"
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Switch
+                      id="includeHabits"
+                      size="sm"
                       checked={autoIncludeHabits}
-                      onChange={(e) => {
-                        setAutoIncludeHabits(e.target.checked);
+                      onCheckedChange={(val) => {
+                        setAutoIncludeHabits(val);
                         if (projectData) {
-                          applyTemplateWithHabits(selectedTemplate, projectData, e.target.checked);
+                          applyTemplateWithHabits(selectedTemplate, projectData, val);
                         }
                       }}
-                      className="rounded border-border accent-teal-600"
                     />
-                    <span>Sertakan kebiasaan koding lama</span>
-                  </label>
+                    <Label
+                      htmlFor="includeHabits"
+                      className="text-xs text-muted-foreground font-normal cursor-pointer select-none"
+                    >
+                      Sertakan kebiasaan koding lama
+                    </Label>
+                  </div>
                 )}
               </div>
 
-              {/* Template Buttons Grid */}
+              {/* Coding Template Selector Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-6 gap-2 pt-2">
                 {TEMPLATES.map((tpl) => {
                   const isSelected = selectedTemplate === tpl.id;
@@ -1099,10 +1060,10 @@ ${systemPrompt.trim()}
                       key={tpl.id}
                       type="button"
                       onClick={() => handleSelectTemplate(tpl.id)}
-                      className={`flex flex-col items-start gap-1 rounded-lg border p-2 text-left transition-all ${
+                      className={`flex flex-col items-start gap-1 rounded-lg border p-2 text-left transition-colors cursor-pointer ${
                         isSelected
-                          ? "border-teal-500 bg-teal-500/10 text-teal-600 dark:text-teal-400 shadow-sm"
-                          : "bg-muted/30 hover:bg-muted/70 border-border/70 hover:border-teal-500/30"
+                          ? "border-teal-500 bg-teal-500/10 text-teal-600 dark:text-teal-400 shadow-xs"
+                          : "border-border bg-muted/20 hover:bg-muted/60 hover:border-teal-500/30 text-foreground"
                       }`}
                     >
                       <div className="flex items-center gap-1 font-medium text-xs">
@@ -1124,13 +1085,13 @@ ${systemPrompt.trim()}
               </div>
             </CardHeader>
 
-            <CardContent className="flex flex-1 flex-col overflow-hidden p-3 sm:p-4 space-y-3">
+            <CardContent className="flex flex-1 flex-col overflow-hidden p-3 sm:p-4 gap-3">
               {/* Textarea Editor */}
-              <div className="flex flex-1 flex-col space-y-1 overflow-hidden min-h-[180px]">
+              <div className="flex flex-1 flex-col space-y-1.5 overflow-hidden min-h-[180px]">
                 <div className="flex items-center justify-between shrink-0">
-                  <label className="text-xs font-medium text-muted-foreground">
+                  <Label className="text-xs font-medium text-muted-foreground">
                     Instruksi Sistem (System Prompt):
-                  </label>
+                  </Label>
                   <span className="text-[11px] text-muted-foreground font-mono">
                     {systemPrompt.length} karakter (~{Math.round(systemPrompt.length / 4)} token)
                   </span>
@@ -1143,18 +1104,18 @@ ${systemPrompt.trim()}
                       ? "Sesuaikan instruksi untuk ER-AI di sini..."
                       : "Pilih folder project dari antrean di sebelah kiri untuk menghasilkan instruksi otomatis..."
                   }
-                  className="flex-1 font-mono text-xs leading-relaxed bg-background/90 resize-none min-h-[160px] border-border/80 focus-visible:ring-teal-500/40"
+                  className="flex-1 font-mono text-xs leading-relaxed bg-background resize-none min-h-[160px] border-border focus-visible:ring-teal-500/40"
                 />
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row gap-2 pt-2 sm:items-center sm:justify-between border-t border-border/60 shrink-0">
+              {/* Action Buttons Bar */}
+              <div className="flex flex-col sm:flex-row gap-2 pt-2 sm:items-center sm:justify-between border-t border-border shrink-0">
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={handleCopyModelfile}
-                    className="text-xs gap-1.5 h-8 hover:border-teal-500/40 hover:text-teal-500 transition-colors"
+                    className="text-xs gap-1.5 h-8 hover:border-teal-500/40 hover:text-teal-500"
                     title="Salin format Modelfile lengkap"
                   >
                     <Copy className="size-3.5" />
@@ -1165,7 +1126,7 @@ ${systemPrompt.trim()}
                     size="sm"
                     onClick={handleSaveAgentsRules}
                     disabled={isSavingRules || !projectPath}
-                    className="text-xs gap-1.5 h-8 hover:border-teal-500/40 hover:text-teal-500 transition-colors"
+                    className="text-xs gap-1.5 h-8 hover:border-teal-500/40 hover:text-teal-500"
                     title="Simpan AGENTS.md langsung ke folder proyek Anda"
                   >
                     <Save className="size-3.5" />
@@ -1181,7 +1142,6 @@ ${systemPrompt.trim()}
                     }
                     setIsTrainingModalOpen(true);
                     setTrainingStatus("running");
-                    setTrainingError(null);
                     setCurrentStageId(1);
                     setProgressPercent(20);
                     setTrainingLogs([
@@ -1230,15 +1190,21 @@ ${systemPrompt.trim()}
                         toast.success(`Model "${targetModelName}" berhasil dilatih & dianalisis!`);
                       } else {
                         setTrainingStatus("error");
-                        setTrainingError(res.message);
+                        setTrainingLogs((prev) => [
+                          ...prev,
+                          `[${new Date().toLocaleTimeString()}] [ERROR] ${res.message}`,
+                        ]);
                       }
                     } catch (err: any) {
                       setTrainingStatus("error");
-                      setTrainingError(err.message);
+                      setTrainingLogs((prev) => [
+                        ...prev,
+                        `[${new Date().toLocaleTimeString()}] [ERROR] ${err.message}`,
+                      ]);
                     }
                   }}
                   disabled={!systemPrompt.trim() || !projectPath}
-                  className="gap-2 bg-teal-600 hover:bg-teal-500 text-white font-semibold shadow-sm hover:shadow-teal-500/20 h-9 px-4 transition-all"
+                  className="gap-2 bg-teal-600 hover:bg-teal-500 text-white font-semibold shadow-xs h-9 px-4"
                 >
                   <Rocket className="size-4" />
                   Latih Proyek Ini Saja
@@ -1257,8 +1223,8 @@ ${systemPrompt.trim()}
           setIsTrainingModalOpen(open);
         }}
       >
-        <DialogContent className="max-w-[95vw] sm:max-w-[680px] max-h-[88vh] overflow-y-auto border-border/80 bg-card/95 backdrop-blur-md">
-          <DialogHeader>
+        <DialogContent className="max-w-[95vw] sm:max-w-[680px] max-h-[88vh] p-0 flex flex-col overflow-hidden border border-border bg-card">
+          <DialogHeader className="p-4 sm:p-5 border-b border-border bg-muted/10">
             <DialogTitle className="flex items-center gap-2 text-sm sm:text-base font-bold text-foreground">
               {trainingStatus === "running" && (
                 <Loader2 className="size-5 animate-spin text-teal-500" />
@@ -1267,7 +1233,7 @@ ${systemPrompt.trim()}
                 <CheckCircle2 className="size-5 text-teal-500" />
               )}
               {trainingStatus === "error" && (
-                <AlertCircle className="size-5 text-rose-500" />
+                <AlertCircle className="size-5 text-destructive" />
               )}
               <span>
                 {trainingStatus === "running" && (
@@ -1284,150 +1250,151 @@ ${systemPrompt.trim()}
             </DialogDescription>
           </DialogHeader>
 
-          {/* Progress Bar & Percentage */}
-          <div className="space-y-1.5 py-1">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-medium text-muted-foreground">
-                {isBatchProcessing
-                  ? `Kemajuan Antrean (${batchCurrentIndex}/${batchTotalCount}):`
-                  : "Status Kemajuan:"}
-              </span>
-              <span className="font-mono font-bold text-teal-600 dark:text-teal-400">
-                {progressPercent}%
-              </span>
-            </div>
-            <Progress value={progressPercent} className="h-2" />
-          </div>
-
-          {/* Step-by-Step Stage List */}
-          <div className="space-y-1.5 rounded-lg border border-border/80 bg-muted/20 p-2.5">
-            {TRAINING_STAGES.map((stage) => {
-              const isPast = currentStageId > stage.id || trainingStatus === "success";
-              const isCurrent = currentStageId === stage.id && trainingStatus === "running";
-              const isFailed = currentStageId === stage.id && trainingStatus === "error";
-
-              return (
-                <div
-                  key={stage.id}
-                  className={`flex items-start gap-2.5 rounded-md p-1.5 text-xs transition-colors ${
-                    isCurrent
-                      ? "bg-teal-500/10 border border-teal-500/30"
-                      : isPast
-                      ? "text-foreground"
-                      : "text-muted-foreground/60"
-                  }`}
-                >
-                  <div className="pt-0.5 shrink-0">
-                    {isPast && <CheckCircle2 className="size-4 text-teal-500" />}
-                    {isCurrent && <Loader2 className="size-4 animate-spin text-teal-500" />}
-                    {isFailed && <AlertCircle className="size-4 text-rose-500" />}
-                    {!isPast && !isCurrent && !isFailed && (
-                      <Clock className="size-4 text-muted-foreground/40" />
-                    )}
-                  </div>
-
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <span className={`font-semibold ${isCurrent ? "text-teal-600 dark:text-teal-400" : ""}`}>
-                        {stage.title}
-                      </span>
-                      {isPast && (
-                        <span className="text-[10px] text-teal-600 dark:text-teal-400 font-medium">Selesai</span>
-                      )}
-                      {isCurrent && (
-                        <span className="text-[10px] text-teal-600 dark:text-teal-400 animate-pulse font-medium">
-                          Sedang Berjalan...
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">{stage.description}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Verification & AI Analysis Report */}
-          {testPlanResult && testPlanResult.response && (
-            <div className="rounded-lg border border-teal-500/30 bg-teal-500/5 dark:bg-teal-950/20 p-3 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 font-bold text-xs text-teal-700 dark:text-teal-300">
-                  <Sparkles className="size-4 text-teal-500" />
-                  Laporan Hasil Analisa Arsitektur AI
-                </div>
-                <Badge
-                  variant="outline"
-                  className="text-[10px] font-mono border-teal-500/40 text-teal-600 dark:text-teal-300"
-                >
-                  Tersimpan di SQLite
-                </Badge>
-              </div>
-
-              {/* Performance Metrics */}
-              {testPlanResult.tokensPerSec > 0 && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded border border-border/80 bg-background/80 p-2 text-center">
-                    <div className="flex items-center justify-center gap-1 text-[10px] text-muted-foreground">
-                      <Zap className="size-3 text-amber-500" />
-                      Kecepatan AI
-                    </div>
-                    <div className="text-xs font-mono font-bold text-foreground">
-                      {testPlanResult.tokensPerSec}{" "}
-                      <span className="text-[10px] font-normal text-muted-foreground">tok/s</span>
-                    </div>
-                  </div>
-
-                  <div className="rounded border border-border/80 bg-background/80 p-2 text-center">
-                    <div className="flex items-center justify-center gap-1 text-[10px] text-muted-foreground">
-                      <Gauge className="size-3 text-teal-500" />
-                      Durasi Eksekusi
-                    </div>
-                    <div className="text-xs font-mono font-bold text-foreground">
-                      {testPlanResult.durationMs}{" "}
-                      <span className="text-[10px] font-normal text-muted-foreground">ms</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Model Output Response Sample */}
-              <div className="space-y-1">
-                <span className="text-[11px] font-semibold text-foreground">
-                  Catatan & Evaluasi AI Terhadap Proyek:
+          {/* Modal Content Scroll Area */}
+          <ScrollArea className="flex-1 p-4 sm:p-5 space-y-4">
+            {/* Progress Bar & Percentage */}
+            <div className="space-y-1.5 py-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-medium text-muted-foreground">
+                  {isBatchProcessing
+                    ? `Kemajuan Antrean (${batchCurrentIndex}/${batchTotalCount}):`
+                    : "Status Kemajuan:"}
                 </span>
-                <div className="rounded border border-teal-500/20 bg-background/90 p-2.5 font-mono text-[11px] leading-relaxed max-h-44 overflow-y-auto whitespace-pre-wrap">
-                  {testPlanResult.response}
+                <span className="font-mono font-bold text-teal-600 dark:text-teal-400">
+                  {progressPercent}%
+                </span>
+              </div>
+              <Progress value={progressPercent} className="h-2" />
+            </div>
+
+            {/* Step-by-Step Stage List */}
+            <div className="space-y-1.5 rounded-lg border border-border bg-muted/20 p-2.5">
+              {TRAINING_STAGES.map((stage) => {
+                const isPast = currentStageId > stage.id || trainingStatus === "success";
+                const isCurrent = currentStageId === stage.id && trainingStatus === "running";
+                const isFailed = currentStageId === stage.id && trainingStatus === "error";
+
+                return (
+                  <div
+                    key={stage.id}
+                    className={`flex items-start gap-2.5 rounded-md p-2 text-xs transition-colors ${
+                      isCurrent
+                        ? "bg-teal-500/10 border border-teal-500/30"
+                        : isPast
+                        ? "text-foreground"
+                        : "text-muted-foreground/60"
+                    }`}
+                  >
+                    <div className="pt-0.5 shrink-0">
+                      {isPast && <CheckCircle2 className="size-4 text-teal-500" />}
+                      {isCurrent && <Loader2 className="size-4 animate-spin text-teal-500" />}
+                      {isFailed && <AlertCircle className="size-4 text-destructive" />}
+                      {!isPast && !isCurrent && !isFailed && (
+                        <Clock className="size-4 text-muted-foreground/40" />
+                      )}
+                    </div>
+
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className={`font-semibold ${isCurrent ? "text-teal-600 dark:text-teal-400" : ""}`}>
+                          {stage.title}
+                        </span>
+                        {isPast && (
+                          <span className="text-[10px] text-teal-600 dark:text-teal-400 font-medium">Selesai</span>
+                        )}
+                        {isCurrent && (
+                          <span className="text-[10px] text-teal-600 dark:text-teal-400 animate-pulse font-medium">
+                            Sedang Berjalan...
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">{stage.description}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Verification & AI Analysis Report */}
+            {testPlanResult && testPlanResult.response && (
+              <div className="rounded-lg border border-teal-500/30 bg-teal-500/5 dark:bg-teal-950/20 p-3 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-teal-700 dark:text-teal-300">
+                    <Sparkles className="size-4 text-teal-500" />
+                    Laporan Hasil Analisa Arsitektur AI
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] font-mono border-teal-500/40 text-teal-600 dark:text-teal-300"
+                  >
+                    Tersimpan di SQLite
+                  </Badge>
+                </div>
+
+                {testPlanResult.tokensPerSec > 0 && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded border border-border bg-background p-2 text-center">
+                      <div className="flex items-center justify-center gap-1 text-[10px] text-muted-foreground">
+                        <Zap className="size-3 text-amber-500" />
+                        Kecepatan AI
+                      </div>
+                      <div className="text-xs font-mono font-bold text-foreground">
+                        {testPlanResult.tokensPerSec}{" "}
+                        <span className="text-[10px] font-normal text-muted-foreground">tok/s</span>
+                      </div>
+                    </div>
+
+                    <div className="rounded border border-border bg-background p-2 text-center">
+                      <div className="flex items-center justify-center gap-1 text-[10px] text-muted-foreground">
+                        <Gauge className="size-3 text-teal-500" />
+                        Durasi Eksekusi
+                      </div>
+                      <div className="text-xs font-mono font-bold text-foreground">
+                        {testPlanResult.durationMs}{" "}
+                        <span className="text-[10px] font-normal text-muted-foreground">ms</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-1">
+                  <span className="text-[11px] font-semibold text-foreground">
+                    Catatan & Evaluasi AI Terhadap Proyek:
+                  </span>
+                  <div className="rounded border border-teal-500/20 bg-background/80 p-2.5 font-mono text-[11px] leading-relaxed max-h-44 overflow-y-auto whitespace-pre-wrap">
+                    {testPlanResult.response}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Live Log Console */}
-          <div className="space-y-1">
-            <span className="text-[10px] uppercase font-mono text-muted-foreground tracking-wider">
-              Log Terminal & Pemrosesan:
-            </span>
-            <div className="rounded-lg bg-black/90 dark:bg-black/95 p-2.5 font-mono text-[11px] text-teal-400 max-h-24 overflow-y-auto border border-border/40 space-y-0.5">
-              {trainingLogs.map((log, index) => (
-                <div
-                  key={index}
-                  className={
-                    log.includes("[ERROR]") || log.includes("[FATAL]") || log.includes("[GAGAL]")
-                      ? "text-rose-400"
-                      : log.includes("[SUKSES]")
-                      ? "text-emerald-400"
-                      : log.includes("[TEST PLAN]") || log.includes("[Proyek")
-                      ? "text-amber-300"
-                      : ""
-                  }
-                >
-                  {log}
-                </div>
-              ))}
+            {/* Live Log Console */}
+            <div className="space-y-1">
+              <span className="text-[10px] uppercase font-mono text-muted-foreground tracking-wider">
+                Log Terminal & Pemrosesan:
+              </span>
+              <div className="rounded-lg bg-zinc-950 p-2.5 font-mono text-[11px] text-teal-400 max-h-28 overflow-y-auto border border-border space-y-0.5">
+                {trainingLogs.map((log, index) => (
+                  <div
+                    key={index}
+                    className={
+                      log.includes("[ERROR]") || log.includes("[FATAL]") || log.includes("[GAGAL]")
+                        ? "text-rose-400"
+                        : log.includes("[SUKSES]")
+                        ? "text-emerald-400"
+                        : log.includes("[TEST PLAN]") || log.includes("[Proyek")
+                        ? "text-amber-300"
+                        : ""
+                    }
+                  >
+                    {log}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          </ScrollArea>
 
-          <DialogFooter className="pt-2">
+          <DialogFooter className="p-3 sm:p-4 border-t border-border bg-muted/10 shrink-0">
             {trainingStatus === "running" ? (
               <span className="text-xs text-muted-foreground animate-pulse font-mono">
                 Sedang memproses bertahap...
@@ -1435,7 +1402,7 @@ ${systemPrompt.trim()}
             ) : (
               <Button
                 onClick={() => setIsTrainingModalOpen(false)}
-                className="bg-teal-600 hover:bg-teal-500 text-white text-xs h-8 shadow-sm"
+                className="bg-teal-600 hover:bg-teal-500 text-white text-xs h-8 shadow-xs"
               >
                 Selesai & Tutup
               </Button>
@@ -1446,8 +1413,8 @@ ${systemPrompt.trim()}
 
       {/* AI Analysis Inspection Modal */}
       <Dialog open={isAnalysisModalOpen} onOpenChange={setIsAnalysisModalOpen}>
-        <DialogContent className="max-w-[95vw] sm:max-w-[640px] max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-[95vw] sm:max-w-[640px] max-h-[85vh] p-0 flex flex-col overflow-hidden border border-border bg-card">
+          <DialogHeader className="p-4 sm:p-5 border-b border-border bg-muted/10">
             <DialogTitle className="flex items-center gap-2 text-sm sm:text-base font-bold text-foreground">
               <Sparkles className="size-4 text-teal-500" />
               Laporan Analisa Arsitektur AI — {selectedAnalysisProject?.project_name}
@@ -1458,8 +1425,7 @@ ${systemPrompt.trim()}
           </DialogHeader>
 
           {selectedAnalysisProject && (
-            <div className="space-y-3 py-1">
-              {/* Meta pills */}
+            <ScrollArea className="flex-1 p-4 sm:p-5 space-y-3">
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <Badge variant="outline" className="font-mono text-[10px]">
                   Model: {selectedAnalysisProject.target_model_name}
@@ -1470,20 +1436,19 @@ ${systemPrompt.trim()}
                   </Badge>
                 )}
                 {selectedAnalysisProject.tokens_per_sec > 0 && (
-                  <Badge className="bg-teal-500/10 text-teal-600 font-mono text-[10px]">
+                  <Badge className="bg-teal-500/10 text-teal-600 dark:text-teal-400 font-mono text-[10px]">
                     {Math.round(selectedAnalysisProject.tokens_per_sec)} tok/s
                   </Badge>
                 )}
               </div>
 
-              {/* Analysis Text Body */}
-              <div className="rounded-lg border border-teal-500/20 bg-muted/20 p-3 font-mono text-xs leading-relaxed max-h-[360px] overflow-y-auto whitespace-pre-wrap">
+              <div className="rounded-lg border border-teal-500/20 bg-muted/20 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap">
                 {selectedAnalysisProject.ai_analysis || "Belum ada analisa untuk proyek ini."}
               </div>
-            </div>
+            </ScrollArea>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="p-3 sm:p-4 border-t border-border bg-muted/10 shrink-0">
             <Button
               variant="outline"
               size="sm"

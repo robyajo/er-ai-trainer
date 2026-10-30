@@ -1,61 +1,19 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { getPlatform } from "@/actions/app";
 import { closeWindow, maximizeWindow, minimizeWindow } from "@/actions/window";
+import { cn } from "cn";
 
-interface DragWindowRegionProps {
+export interface DragWindowRegionProps {
   title?: ReactNode;
+  children?: ReactNode;
+  className?: string;
 }
 
-export default function DragWindowRegion({ title }: DragWindowRegionProps) {
-  const [platform, setPlatform] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-
-    getPlatform()
-      .then((value) => {
-        if (!active) {
-          return;
-        }
-
-        setPlatform(value);
-      })
-      .catch((error) => {
-        console.error("Failed to detect platform", error);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const isMacOS = platform === "darwin";
-
-  return (
-    <div className="flex w-full items-stretch justify-between border-b border-border/60 bg-card/60 backdrop-blur text-xs">
-      <div className="draglayer w-full flex items-center px-3 py-1.5">
-        {title && !isMacOS && (
-          <div className="flex flex-1 items-center gap-2 select-none whitespace-nowrap text-muted-foreground font-mono text-[11px] font-medium">
-            <span className="size-2 rounded-full bg-teal-500 animate-pulse" />
-            {title}
-          </div>
-        )}
-        {isMacOS && (
-          <div className="flex flex-1 py-1">
-            {/* Maintain height for macOS traffic lights */}
-          </div>
-        )}
-      </div>
-      {!isMacOS && <WindowButtons />}
-    </div>
-  );
-}
-
-function WindowButtons() {
+export function WindowButtons() {
   return (
     <div className="flex items-center text-muted-foreground">
       <button
-        className="px-3 py-1.5 hover:bg-muted hover:text-foreground transition-colors"
+        className="px-2.5 py-1.5 hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
         onClick={minimizeWindow}
         title="Minimize"
         type="button"
@@ -71,7 +29,7 @@ function WindowButtons() {
         </svg>
       </button>
       <button
-        className="px-3 py-1.5 hover:bg-muted hover:text-foreground transition-colors"
+        className="px-2.5 py-1.5 hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
         onClick={maximizeWindow}
         title="Maximize"
         type="button"
@@ -94,7 +52,7 @@ function WindowButtons() {
         </svg>
       </button>
       <button
-        className="px-3 py-1.5 hover:bg-rose-500 hover:text-white transition-colors"
+        className="px-2.5 py-1.5 hover:bg-rose-500 hover:text-white transition-colors cursor-pointer"
         onClick={closeWindow}
         title="Close"
         type="button"
@@ -113,6 +71,57 @@ function WindowButtons() {
           />
         </svg>
       </button>
+    </div>
+  );
+}
+
+export default function DragWindowRegion({
+  title,
+  children,
+  className,
+}: DragWindowRegionProps) {
+  const [platform, setPlatform] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    getPlatform()
+      .then((value) => {
+        if (!active) {
+          return;
+        }
+        setPlatform(value);
+      })
+      .catch((error) => {
+        console.error("Failed to detect platform", error);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const isMacOS = platform === "darwin";
+
+  return (
+    <div
+      className={cn(
+        "flex h-11 w-full shrink-0 items-center justify-between border-b border-border bg-card/80 px-3 backdrop-blur-md text-xs select-none",
+        className
+      )}
+    >
+      <div className="draglayer flex flex-1 items-center h-full min-w-0 mr-3">
+        {isMacOS && <div className="w-16 shrink-0" />}
+        {title && (
+          <div className="flex items-center gap-2 truncate">
+            {title}
+          </div>
+        )}
+      </div>
+      <div className="flex items-center gap-2.5 shrink-0">
+        {children}
+        {!isMacOS && <WindowButtons />}
+      </div>
     </div>
   );
 }
