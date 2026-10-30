@@ -9,6 +9,10 @@ export async function getOllamaModels() {
   return await ipc.client.trainer.getOllamaModels();
 }
 
+export async function getModelInfo(modelName: string) {
+  return await ipc.client.trainer.getModelInfo({ modelName });
+}
+
 export async function scanProject(projectPath: string): Promise<ProjectAnalysis> {
   return await ipc.client.trainer.scanProject({ projectPath });
 }

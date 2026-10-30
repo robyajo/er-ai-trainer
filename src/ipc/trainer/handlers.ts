@@ -4,6 +4,7 @@ import { os } from "@orpc/server";
 import { dialog } from "electron";
 import { ipcContext } from "../context";
 import {
+  getModelInfoInputSchema,
   saveProjectRulesInputSchema,
   scanProjectInputSchema,
   trainModelInputSchema,
@@ -69,6 +70,57 @@ export const getOllamaModels = os.handler(async () => {
     };
   }
 });
+
+export const getModelInfo = os
+  .input(getModelInfoInputSchema)
+  .handler(async ({ input }) => {
+    try {
+      const res = await fetch("http://localhost:11434/api/show", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: input.modelName }),
+      });
+
+      if (!res.ok) {
+        return {
+          success: false,
+          model: input.modelName,
+          system: "",
+          parameters: "",
+          hasExistingKnowledge: false,
+          message: `Gagal membaca informasi model (HTTP ${res.status})`,
+        };
+      }
+
+      const data = (await res.json()) as {
+        system?: string;
+        parameters?: string;
+        details?: { parent_model?: string; parameter_size?: string };
+        modified_at?: string;
+      };
+
+      const systemPrompt = (data.system || "").trim();
+
+      return {
+        success: true,
+        model: input.modelName,
+        system: systemPrompt,
+        parameters: data.parameters || "",
+        parentModel: data.details?.parent_model || "",
+        hasExistingKnowledge: Boolean(systemPrompt.length > 0),
+        modifiedAt: data.modified_at || "",
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        model: input.modelName,
+        system: "",
+        parameters: "",
+        hasExistingKnowledge: false,
+        message: err.message || "Gagal menghubungi Ollama",
+      };
+    }
+  });
 
 async function safeReadFile(filePath: string): Promise<string | null> {
   try {
@@ -325,14 +377,20 @@ ${systemPrompt.trim()}
       }
     }
 
-    // 3. Call Ollama API /api/create
+    // 3. Call Ollama API /api/create with structured fields
     try {
       const response = await fetch("http://localhost:11434/api/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: newModelName,
-          modelfile: modelfileContent,
+          from: baseModel,
+          system: systemPrompt.trim(),
+          parameters: {
+            temperature,
+            top_p: 0.85,
+            num_ctx: contextLength,
+          },
           stream: false,
         }),
       });

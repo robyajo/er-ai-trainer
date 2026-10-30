@@ -4,6 +4,10 @@ export const scanProjectInputSchema = z.object({
   projectPath: z.string().min(1),
 });
 
+export const getModelInfoInputSchema = z.object({
+  modelName: z.string().min(1),
+});
+
 export const trainModelInputSchema = z.object({
   newModelName: z.string().min(1),
   baseModel: z.string().min(1),

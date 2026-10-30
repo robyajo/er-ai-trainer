@@ -1,4 +1,5 @@
 import {
+  getModelInfo,
   getOllamaModels,
   saveProjectRules,
   scanProject,
@@ -9,6 +10,7 @@ import {
 export const trainer = {
   selectFolder,
   getOllamaModels,
+  getModelInfo,
   scanProject,
   trainModel,
   saveProjectRules,
