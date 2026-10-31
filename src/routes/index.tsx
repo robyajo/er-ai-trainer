@@ -28,6 +28,8 @@ import {
   Gauge,
   ListOrdered,
   PenTool,
+  Bot,
+  UploadCloud,
 } from "lucide-react";
 import {
   addProjectsToQueue,
@@ -77,6 +79,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import ToggleTheme from "@/components/toggle-theme";
+import { TrainerChatTab } from "@/components/trainer-chat-tab";
+import { OpenCodeModelsDialog } from "@/components/opencode-models-dialog";
+import { PushModelDialog } from "@/components/push-model-dialog";
 import DragWindowRegion from "@/components/drag-window-region";
 
 interface TemplateItem {
@@ -252,12 +257,16 @@ function TrainerPage() {
   const [, setIsScanning] = useState<boolean>(false);
   const [projectData, setProjectData] = useState<ProjectAnalysis | null>(null);
 
-  const [selectedBaseModel, setSelectedBaseModel] = useState<string>("er-ai:latest");
-  const [targetModelName, setTargetModelName] = useState<string>("er-ai");
+  const [selectedBaseModel, setSelectedBaseModel] = useState<string>("er-ai-code:v1.0");
+  const [targetModelName, setTargetModelName] = useState<string>("er-ai-code:v1.0");
+  const [analysisEngine, setAnalysisEngine] = useState<"ollama" | "opencode">("opencode");
   const [selectedTemplate, setSelectedTemplate] = useState<string>("fullstack");
   const [systemPrompt, setSystemPrompt] = useState<string>("");
   const [temperature, setTemperature] = useState<number>(0.3);
   const [contextLength, setContextLength] = useState<number>(32768);
+
+  // Top-level Application Tab ("trainer" | "chat")
+  const [activeMainTab, setActiveMainTab] = useState<"trainer" | "chat">("trainer");
 
   // Responsive mobile/tablet view switcher ("queue" | "editor")
   const [activeMobileView, setActiveMobileView] = useState<"queue" | "editor">("queue");
@@ -285,6 +294,9 @@ function TrainerPage() {
 
   // AI Analysis View Modal State
   const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState<boolean>(false);
+  const [isOpenCodeModalOpen, setIsOpenCodeModalOpen] = useState<boolean>(false);
+  const [isPushModalOpen, setIsPushModalOpen] = useState<boolean>(false);
+  const [pushTargetModel, setPushTargetModel] = useState<string>("");
   const [selectedAnalysisProject, setSelectedAnalysisProject] = useState<ProjectRecord | null>(null);
 
   // Fetch Ollama models & SQLite queue on mount
@@ -327,19 +339,88 @@ function TrainerPage() {
 
   const refreshOllama = async () => {
     const res = await getOllamaModels();
+    const models = res.models || [];
     setOllamaStatus({
       online: res.online,
-      models: res.models || [],
+      models,
     });
-    if (res.models && res.models.length > 0) {
-      const preferred = res.models.find(
-        (m) => m.name.includes("er-ai") || m.name.includes("qwen")
-      );
+    if (models.length > 0) {
+      // Find latest er-ai-code:v* (or fallback to legacy er-ai:v*)
+      let highestMajor = -1;
+      let highestMinor = -1;
+      let latestErAiCode: string | null = null;
+      for (const m of models) {
+        const match = m.name.match(/^(?:er-ai-code|er-ai):v?(\d+)\.(\d+)$/i);
+        if (match) {
+          const major = parseInt(match[1], 10);
+          const minor = parseInt(match[2], 10);
+          if (major > highestMajor || (major === highestMajor && minor > highestMinor)) {
+            highestMajor = major;
+            highestMinor = minor;
+            latestErAiCode = m.name;
+          }
+        }
+      }
+      if (!latestErAiCode) {
+        if (models.some((m) => m.name === "er-ai-code:latest")) latestErAiCode = "er-ai-code:latest";
+        else if (models.some((m) => m.name === "er-ai-code")) latestErAiCode = "er-ai-code";
+        else if (models.some((m) => m.name === "er-ai:latest")) latestErAiCode = "er-ai:latest";
+        else if (models.some((m) => m.name === "er-ai")) latestErAiCode = "er-ai";
+      }
+
+      const preferred =
+        (latestErAiCode ? models.find((m) => m.name === latestErAiCode) : null) ||
+        models.find(
+          (m) =>
+            m.name.includes("coder") ||
+            m.name.includes("qwen") ||
+            m.name.includes("llama") ||
+            m.name.includes("deepseek") ||
+            m.name.includes("mistral")
+        ) ||
+        models[0];
+
       if (preferred) {
         setSelectedBaseModel(preferred.name);
-      } else {
-        setSelectedBaseModel(res.models[0].name);
       }
+
+      // Automatically calculate next targetModelName version based on existing models
+      const allKnownNames = models.map((m) => m.name);
+      try {
+        const queue = await getProjectQueue();
+        queue.forEach((p) => {
+          if (p.target_model_name) allKnownNames.push(p.target_model_name);
+        });
+      } catch {}
+
+      let nextMajor = 1;
+      let nextMinor = -1;
+      for (const name of allKnownNames) {
+        const match = name.match(/^(?:er-ai-code|er-ai):v?(\d+)\.(\d+)$/i);
+        if (match) {
+          const major = parseInt(match[1], 10);
+          const minor = parseInt(match[2], 10);
+          if (major > nextMajor || (major === nextMajor && minor > nextMinor)) {
+            nextMajor = major;
+            nextMinor = minor;
+          }
+        }
+      }
+      const nextVer = nextMinor === -1 ? "er-ai-code:v1.0" : `er-ai-code:v${nextMajor}.${nextMinor + 1}`;
+      setTargetModelName((curr) => {
+        if (
+          !curr ||
+          curr === "er-ai:latest" ||
+          curr === "er-ai" ||
+          curr === "er-ai-code:latest" ||
+          curr === "er-ai-code" ||
+          curr === "er-ai:v1.0" ||
+          curr === "er-ai-code:v1.0"
+        ) {
+          return nextVer;
+        }
+        return curr;
+      });
     }
   };
 
@@ -409,12 +490,6 @@ function TrainerPage() {
     try {
       const data = await scanProject(path);
       setProjectData(data);
-      const safeProjectName = data.name
-        .toLowerCase()
-        .replace(/[^a-z0-9_-]/g, "-")
-        .slice(0, 20);
-      setTargetModelName(`er-ai-${safeProjectName}`);
-
       applyTemplateWithHabits(selectedTemplate, data, hasExistingHabits && autoIncludeHabits);
       toast.success(`Berhasil menganalisis "${data.name}"!`);
       setActiveMobileView("editor");
@@ -511,6 +586,9 @@ ${projectContent.trim()}`;
         const result = await processSingleProjectTraining({
           projectPath: item.project_path,
           baseModel: selectedBaseModel,
+          targetModelName: targetModelName.trim() || undefined,
+          analysisEngine,
+          opencodeModel: "opencode/nemotron-3.5-lightning-free",
           templateId: selectedTemplate,
           temperature,
           contextLength,
@@ -602,52 +680,55 @@ ${systemPrompt.trim()}
       {/* Sleek Unified Application Titlebar Header */}
       <DragWindowRegion
         title={
-          <div className="flex items-center gap-2.5">
-            <div className="flex size-7 items-center justify-center rounded-lg bg-teal-500/10 border border-teal-500/30 text-teal-600 dark:text-teal-400">
-              <BrainCircuit className="size-4" />
-            </div>
+          <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-xs tracking-tight text-foreground">
-                ER-AI Trainer Studio
+              <div className="flex size-7 items-center justify-center rounded-lg bg-teal-500/10 border border-teal-500/30 text-teal-600 dark:text-teal-400">
+                <BrainCircuit className="size-4" />
+              </div>
+              <span className="font-semibold text-xs tracking-tight text-foreground hidden sm:inline">
+                ER-AI Studio
               </span>
-              <Badge
-                variant="outline"
-                className="hidden sm:inline-flex text-[10px] px-1.5 py-0 font-mono border-teal-500/30 text-teal-600 dark:text-teal-400 bg-teal-500/5"
+            </div>
+
+            {/* Top-Level Main App Tabs: Tab 1 Trainer, Tab 2 Uji & Chat */}
+            <div
+              className="no-drag flex items-center gap-1 bg-muted/60 p-0.5 rounded-lg border border-border/60 pointer-events-auto"
+              style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+            >
+              <button
+                type="button"
+                onClick={() => setActiveMainTab("trainer")}
+                style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+                className={`no-drag flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition-all cursor-pointer select-none ${
+                  activeMainTab === "trainer"
+                    ? "bg-background text-teal-600 dark:text-teal-400 shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground font-medium"
+                }`}
               >
-                SQLite Ingestion Hub
-              </Badge>
+                <Sparkles className="size-3.5" />
+                <span>Trainer</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveMainTab("chat")}
+                style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+                className={`no-drag flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition-all cursor-pointer select-none ${
+                  activeMainTab === "chat"
+                    ? "bg-background text-teal-600 dark:text-teal-400 shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground font-medium"
+                }`}
+              >
+                <Bot className="size-3.5" />
+                <span>Uji & Chat AI</span>
+                <span className="flex size-1.5 rounded-full bg-teal-400 animate-pulse ml-0.5" />
+              </button>
             </div>
           </div>
         }
       >
-        {/* Responsive Mobile/Tablet Switcher (Visible on < lg) */}
-        <div className="flex lg:hidden mr-1">
-          <Tabs
-            value={activeMobileView}
-            onValueChange={(val) => setActiveMobileView(val as "queue" | "editor")}
-          >
-            <TabsList className="h-7 p-0.5 bg-muted/60">
-              <TabsTrigger
-                value="queue"
-                className="text-[11px] px-2 py-0.5 gap-1.5 data-[state=active]:bg-background data-[state=active]:text-teal-600 dark:data-[state=active]:text-teal-400"
-              >
-                <ListOrdered className="size-3" />
-                <span>Antrean ({totalCount})</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="editor"
-                className="text-[11px] px-2 py-0.5 gap-1.5 data-[state=active]:bg-background data-[state=active]:text-teal-600 dark:data-[state=active]:text-teal-400"
-              >
-                <PenTool className="size-3" />
-                <span>Editor & Latih</span>
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-
         {/* Ollama Status Badge */}
         <div
-          className={`flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium border ${
+          className={`flex items-center gap-1.5 rounded-full px-2 sm:px-2.5 py-0.5 text-[11px] font-medium border shrink-0 ${
             ollamaStatus.online
               ? "bg-teal-500/10 text-teal-700 dark:text-teal-300 border-teal-500/30"
               : "bg-destructive/10 text-destructive border-destructive/20"
@@ -658,12 +739,12 @@ ${systemPrompt.trim()}
               ollamaStatus.online ? "bg-teal-500 animate-pulse" : "bg-destructive"
             }`}
           />
-          <span className="hidden sm:inline">
+          <span className="hidden md:inline">
             {ollamaStatus.online
               ? `Ollama Aktif (${ollamaStatus.models.length} model)`
               : "Ollama Offline"}
           </span>
-          <span className="inline sm:hidden">
+          <span className="inline md:hidden">
             {ollamaStatus.online ? "Aktif" : "Offline"}
           </span>
         </div>
@@ -673,31 +754,75 @@ ${systemPrompt.trim()}
           variant="ghost"
           size="icon"
           onClick={refreshOllama}
-          className="size-7 text-muted-foreground hover:text-teal-500"
+          className="size-7 text-muted-foreground hover:text-teal-500 shrink-0"
           title="Segarkan Model Ollama"
         >
           <RefreshCw className="size-3.5" />
+        </Button>
+
+        {/* Push Model ke Ollama Hub Button */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setPushTargetModel(selectedBaseModel || targetModelName);
+            setIsPushModalOpen(true);
+          }}
+          className="h-7 px-2 sm:px-2.5 text-xs text-teal-400 border-teal-500/30 bg-teal-500/5 hover:bg-teal-500/15 gap-1.5 font-medium shrink-0"
+          title="Push / Ekspor Model ke Device Lain"
+        >
+          <UploadCloud className="size-3.5" />
+          <span className="hidden md:inline">Push ke Hub</span>
         </Button>
 
         {/* Dark/Light Theme Switcher */}
         <ToggleTheme />
       </DragWindowRegion>
 
-      {/* Main Responsive Grid Layout */}
-      <div className="flex flex-1 overflow-hidden p-3 sm:p-4 gap-3 lg:gap-4 flex-col lg:flex-row">
+      {/* Responsive Mobile Subheader: Antrean vs Editor Switcher (Visible on < lg when in Trainer tab) */}
+      {activeMainTab === "trainer" && (
+        <div className="flex lg:hidden items-center justify-between px-2.5 sm:px-3 py-1.5 border-b border-border bg-card/60 backdrop-blur-xs shrink-0">
+          <Tabs
+            value={activeMobileView}
+            onValueChange={(val) => setActiveMobileView(val as "queue" | "editor")}
+            className="w-full"
+          >
+            <TabsList className="h-8 p-0.5 bg-muted/60 w-full grid grid-cols-2">
+              <TabsTrigger
+                value="queue"
+                className="text-xs px-2 py-1 gap-1.5 data-[state=active]:bg-background data-[state=active]:text-teal-600 dark:data-[state=active]:text-teal-400 font-medium"
+              >
+                <ListOrdered className="size-3.5" />
+                <span>Antrean & Target ({totalCount})</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="editor"
+                className="text-xs px-2 py-1 gap-1.5 data-[state=active]:bg-background data-[state=active]:text-teal-600 dark:data-[state=active]:text-teal-400 font-medium"
+              >
+                <PenTool className="size-3.5" />
+                <span>Editor & Latih</span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+      )}
+
+      {/* Tab 1: Trainer Studio vs Tab 2: Uji & Chat AI */}
+      {activeMainTab === "trainer" ? (
+      <div className="flex flex-1 overflow-y-auto lg:overflow-hidden p-2.5 sm:p-3 lg:p-4 gap-2.5 sm:gap-3 lg:gap-4 flex-col lg:flex-row">
         {/* Left Column: SQLite Multi-Project Queue & Parameters */}
         <div
-          className={`w-full lg:w-[380px] xl:w-[420px] shrink-0 flex flex-col gap-3 overflow-hidden ${
+          className={`w-full lg:w-[360px] xl:w-[410px] shrink-0 flex flex-col gap-2.5 sm:gap-3 overflow-hidden ${
             activeMobileView === "queue" ? "flex" : "hidden lg:flex"
           }`}
         >
           {/* Card: SQLite Multi-Project Queue */}
           <Card className="flex flex-1 flex-col overflow-hidden">
-            <CardHeader className="pb-3 border-b border-border bg-muted/10">
-              <div className="flex items-center justify-between">
+            <CardHeader className="py-2.5 px-3 sm:px-3.5 border-b border-border bg-muted/10 shrink-0">
+              <div className="flex items-center justify-between gap-2">
                 <CardTitle className="text-xs font-mono tracking-wider uppercase text-muted-foreground flex items-center gap-1.5">
                   <Database className="size-3.5 text-teal-500" />
-                  Antrean Proyek (SQLite)
+                  <span>Antrean Proyek (SQLite)</span>
                 </CardTitle>
                 <Badge
                   variant="outline"
@@ -708,24 +833,24 @@ ${systemPrompt.trim()}
               </div>
 
               {/* Action buttons to add folder(s) */}
-              <div className="flex gap-2 pt-1">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-1.5">
                 <Button
                   onClick={handlePickMultipleFolders}
                   size="sm"
-                  className="flex-1 gap-1.5 h-8 text-xs bg-teal-600 hover:bg-teal-500 text-white font-medium shadow-xs"
+                  className="col-span-1 sm:col-span-2 gap-1.5 h-7.5 sm:h-8 text-xs bg-teal-600 hover:bg-teal-500 text-white font-medium shadow-xs"
                 >
                   <FolderPlus className="size-3.5" />
-                  + Tambah Banyak Proyek
+                  <span className="truncate">+ Tambah Banyak</span>
                 </Button>
                 <Button
                   onClick={handlePickFolder}
                   variant="outline"
                   size="sm"
-                  className="gap-1 h-8 text-xs hover:border-teal-500/40"
+                  className="gap-1 h-7.5 sm:h-8 text-xs hover:border-teal-500/40"
                   title="Pilih satu folder"
                 >
                   <FolderOpen className="size-3.5" />
-                  Tunggal
+                  <span>Tunggal</span>
                 </Button>
               </div>
             </CardHeader>
@@ -906,14 +1031,40 @@ ${systemPrompt.trim()}
           </Card>
 
           {/* Card: Model Target & Hyperparameters */}
-          <Card className="shrink-0">
-            <CardHeader className="pb-2.5 pt-3.5 px-3.5 sm:px-4">
+          <Card className="shrink-0 border-border bg-card shadow-2xs">
+            <CardHeader className="py-2 px-3 sm:px-3.5 border-b border-border/60 bg-muted/5 flex flex-row items-center justify-between">
               <CardTitle className="text-xs font-mono tracking-wider uppercase text-muted-foreground flex items-center gap-1.5">
                 <Cpu className="size-3.5 text-teal-500" />
-                Target Model Ollama
+                <span>Target Model Ollama</span>
               </CardTitle>
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsOpenCodeModalOpen(true)}
+                  className="h-6 px-1.5 text-[10px] font-mono text-teal-400 hover:text-teal-300 gap-1"
+                  title="Katalog Model OpenCode Free"
+                >
+                  <Sparkles className="size-3" />
+                  <span className="hidden sm:inline">Katalog</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setPushTargetModel(selectedBaseModel || targetModelName);
+                    setIsPushModalOpen(true);
+                  }}
+                  className="h-6 px-1.5 text-[10px] font-mono text-teal-400 hover:text-teal-300 gap-1"
+                  title="Push model ke Ollama Hub"
+                >
+                  <UploadCloud className="size-3" />
+                  <span>Push</span>
+                </Button>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-2.5 px-3.5 sm:px-4 pb-3.5">
+            <CardContent className="p-2.5 sm:p-3 space-y-2">
               <div className="space-y-1">
                 <Label className="text-[11px] font-medium text-muted-foreground">
                   Pilih Model Dasar:
@@ -922,41 +1073,170 @@ ${systemPrompt.trim()}
                   value={selectedBaseModel}
                   onValueChange={(val) => setSelectedBaseModel(val)}
                 >
-                  <SelectTrigger className="h-8 text-xs font-mono">
+                  <SelectTrigger className="h-7.5 sm:h-8 text-xs font-mono">
                     <SelectValue placeholder="Pilih model dasar..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {ollamaStatus.models.length > 0 ? (
-                      ollamaStatus.models.map((m) => (
-                        <SelectItem key={m.name} value={m.name} className="text-xs font-mono">
-                          {m.name}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="er-ai:latest" className="text-xs font-mono">
-                        er-ai:latest (Default)
-                      </SelectItem>
-                    )}
+                    {(() => {
+                      const codeModels = ollamaStatus.models.filter(
+                        (m) => m.name.startsWith("er-ai-code") || m.name.startsWith("er-ai:") || m.name === "er-ai"
+                      );
+                      const assistantModels = ollamaStatus.models.filter(
+                        (m) => m.name.startsWith("er-ai-assistant") || m.name.startsWith("er-ai-asistan")
+                      );
+                      const visionModels = ollamaStatus.models.filter(
+                        (m) => m.name.startsWith("er-ai-vision") || m.name.includes("vision") || m.name.includes("omni")
+                      );
+                      const thinkModels = ollamaStatus.models.filter(
+                        (m) =>
+                          (m.name.includes("deepseek-r1") || m.name.includes("lfm3") || m.name.includes("think")) &&
+                          !visionModels.includes(m)
+                      );
+                      const otherModels = ollamaStatus.models.filter(
+                        (m) =>
+                          !codeModels.includes(m) &&
+                          !assistantModels.includes(m) &&
+                          !visionModels.includes(m) &&
+                          !thinkModels.includes(m)
+                      );
+
+                      return (
+                        <>
+                          {codeModels.length > 0 && (
+                            <>
+                              <div className="px-2 py-1 text-[10px] font-mono text-teal-400 font-bold uppercase tracking-wider">
+                                ★ Model Koding ER-AI (er-ai-code)
+                              </div>
+                              {codeModels.map((m) => (
+                                <SelectItem
+                                  key={m.name}
+                                  value={m.name}
+                                  className="text-xs font-mono text-teal-300 font-semibold"
+                                >
+                                  💻 {m.name} (Koding Aktif)
+                                </SelectItem>
+                              ))}
+                            </>
+                          )}
+
+                          {assistantModels.length > 0 && (
+                            <>
+                              <div className="px-2 py-1 text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-wider border-t border-border/40 mt-1">
+                                ★ Model Asisten ER-AI (er-ai-assistant)
+                              </div>
+                              {assistantModels.map((m) => (
+                                <SelectItem
+                                  key={m.name}
+                                  value={m.name}
+                                  className="text-xs font-mono text-emerald-300 font-semibold"
+                                >
+                                  🤖 {m.name} (Asisten BI)
+                                </SelectItem>
+                              ))}
+                            </>
+                          )}
+
+                          {visionModels.length > 0 && (
+                            <>
+                              <div className="px-2 py-1 text-[10px] font-mono text-pink-400 font-bold uppercase tracking-wider border-t border-border/40 mt-1">
+                                ★ Model Vision & Multimodal
+                              </div>
+                              {visionModels.map((m) => (
+                                <SelectItem
+                                  key={m.name}
+                                  value={m.name}
+                                  className="text-xs font-mono text-pink-300 font-semibold"
+                                >
+                                  👁️ {m.name} (Vision & Audio)
+                                </SelectItem>
+                              ))}
+                            </>
+                          )}
+
+                          {thinkModels.length > 0 && (
+                            <>
+                              <div className="px-2 py-1 text-[10px] font-mono text-purple-400 font-bold uppercase tracking-wider border-t border-border/40 mt-1">
+                                ★ Model Penalaran / Thinking
+                              </div>
+                              {thinkModels.map((m) => (
+                                <SelectItem
+                                  key={m.name}
+                                  value={m.name}
+                                  className="text-xs font-mono text-purple-300 font-semibold"
+                                >
+                                  🧠 {m.name} (Reasoning & Logika)
+                                </SelectItem>
+                              ))}
+                            </>
+                          )}
+
+                          {otherModels.length > 0 && (
+                            <>
+                              <div className="px-2 py-1 text-[10px] font-mono text-muted-foreground font-bold uppercase tracking-wider border-t border-border/40 mt-1">
+                                Model Fondasi Lainnya
+                              </div>
+                              {otherModels.map((m) => (
+                                <SelectItem
+                                  key={m.name}
+                                  value={m.name}
+                                  className="text-xs font-mono"
+                                >
+                                  {m.name}
+                                </SelectItem>
+                              ))}
+                            </>
+                          )}
+
+                          {ollamaStatus.models.length === 0 && (
+                            <SelectItem value="er-ai-code:v1.0" className="text-xs font-mono">
+                              er-ai-code:v1.0 (Default)
+                            </SelectItem>
+                          )}
+                        </>
+                      );
+                    })()}
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-1">
                 <Label className="text-[11px] font-medium text-muted-foreground">
-                  Nama Model Baru Hasil Latihan:
+                  Nama Model Hasil Latihan:
                 </Label>
                 <Input
                   value={targetModelName}
                   onChange={(e) => setTargetModelName(e.target.value)}
-                  placeholder="contoh: er-ai-myproject"
-                  className="h-8 text-xs font-mono font-medium focus-visible:ring-teal-500/40"
+                  placeholder="er-ai-code:v1.0"
+                  className="h-7.5 sm:h-8 text-xs font-mono font-medium focus-visible:ring-teal-500/40"
                 />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[11px] font-medium text-muted-foreground">
+                  Mesin Analisa Arsitektur:
+                </Label>
+                <Select
+                  value={analysisEngine}
+                  onValueChange={(val) => setAnalysisEngine(val as "ollama" | "opencode")}
+                >
+                  <SelectTrigger className="h-7.5 sm:h-8 text-xs font-mono">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="opencode" className="text-xs font-mono text-teal-400">
+                      ⚡ OpenCode Free (nemotron-3.5-lightning-free)
+                    </SelectItem>
+                    <SelectItem value="ollama" className="text-xs font-mono">
+                      🦙 Ollama Lokal ({selectedBaseModel})
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="grid grid-cols-2 gap-2 pt-0.5">
                 <div className="space-y-1">
                   <Label className="text-[10px] text-muted-foreground font-mono">
-                    Context Window:
+                    Context:
                   </Label>
                   <Input
                     type="number"
@@ -967,7 +1247,7 @@ ${systemPrompt.trim()}
                 </div>
                 <div className="space-y-1">
                   <Label className="text-[10px] text-muted-foreground font-mono">
-                    Temperature:
+                    Temp:
                   </Label>
                   <Input
                     type="number"
@@ -991,27 +1271,27 @@ ${systemPrompt.trim()}
           }`}
         >
           <Card className="flex flex-1 flex-col overflow-hidden">
-            <CardHeader className="pb-3 border-b border-border bg-muted/10 shrink-0">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <CardHeader className="py-2.5 px-3 sm:px-4 border-b border-border bg-muted/10 shrink-0">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                 <div>
                   <div className="flex items-center gap-2">
-                    <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
+                    <CardTitle className="text-xs sm:text-sm font-semibold flex items-center gap-1.5">
                       <FileCode className="size-4 text-teal-500" />
-                      Editor Instruksi & Pengetahuan
+                      <span>Editor Instruksi & Pengetahuan</span>
                     </CardTitle>
                     {projectData && (
-                      <Badge variant="outline" className="text-[10px] font-mono border-teal-500/30 text-teal-600 dark:text-teal-400">
+                      <Badge variant="outline" className="text-[10px] font-mono border-teal-500/30 text-teal-600 dark:text-teal-400 truncate max-w-[200px]">
                         {projectData.name}
                       </Badge>
                     )}
                   </div>
-                  <CardDescription className="text-xs mt-0.5">
+                  <CardDescription className="text-[11px] text-muted-foreground mt-0.5">
                     Pilih template koding atau sesuaikan prompt sebelum model dilatihkan ke Ollama.
                   </CardDescription>
                 </div>
 
                 {hasExistingHabits && (
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 pt-1 sm:pt-0">
                     <Switch
                       id="includeHabits"
                       size="sm"
@@ -1025,7 +1305,7 @@ ${systemPrompt.trim()}
                     />
                     <Label
                       htmlFor="includeHabits"
-                      className="text-xs text-muted-foreground font-normal cursor-pointer select-none"
+                      className="text-[11px] text-muted-foreground font-normal cursor-pointer select-none"
                     >
                       Sertakan kebiasaan koding lama
                     </Label>
@@ -1034,7 +1314,7 @@ ${systemPrompt.trim()}
               </div>
 
               {/* Coding Template Selector Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-6 gap-2 pt-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-1.5 pt-2">
                 {TEMPLATES.map((tpl) => {
                   const isSelected = selectedTemplate === tpl.id;
                   const Icon = tpl.icon;
@@ -1043,23 +1323,23 @@ ${systemPrompt.trim()}
                       key={tpl.id}
                       type="button"
                       onClick={() => handleSelectTemplate(tpl.id)}
-                      className={`flex flex-col items-start gap-1 rounded-lg border p-2 text-left transition-colors cursor-pointer ${
+                      className={`flex flex-col items-start gap-0.5 rounded-lg border p-1.5 sm:p-2 text-left transition-all cursor-pointer ${
                         isSelected
                           ? "border-teal-500 bg-teal-500/10 text-teal-600 dark:text-teal-400 shadow-xs"
-                          : "border-border bg-muted/20 hover:bg-muted/60 hover:border-teal-500/30 text-foreground"
+                          : "border-border bg-card/60 hover:bg-muted/60 hover:border-teal-500/30 text-foreground"
                       }`}
                     >
-                      <div className="flex items-center gap-1 font-medium text-xs">
+                      <div className="flex items-center gap-1.5 font-medium text-xs w-full">
                         <Icon
-                          className={`size-3.5 ${
+                          className={`size-3.5 shrink-0 ${
                             isSelected ? "text-teal-600 dark:text-teal-400" : "text-muted-foreground"
                           }`}
                         />
-                        <span className={`truncate ${isSelected ? "font-semibold" : ""}`}>
+                        <span className={`truncate text-[11px] ${isSelected ? "font-semibold" : ""}`}>
                           {tpl.name}
                         </span>
                       </div>
-                      <p className="line-clamp-2 text-[10px] text-muted-foreground leading-snug">
+                      <p className="line-clamp-1 text-[10px] text-muted-foreground leading-snug">
                         {tpl.description}
                       </p>
                     </button>
@@ -1068,10 +1348,10 @@ ${systemPrompt.trim()}
               </div>
             </CardHeader>
 
-            <CardContent className="flex flex-1 flex-col overflow-hidden p-3 sm:p-4 gap-3">
+            <CardContent className="flex flex-1 flex-col overflow-hidden p-2.5 sm:p-3.5 gap-2.5">
               {/* Textarea Editor */}
-              <div className="flex flex-1 flex-col space-y-1.5 overflow-hidden min-h-[180px]">
-                <div className="flex items-center justify-between shrink-0">
+              <div className="flex flex-1 flex-col space-y-1 overflow-hidden min-h-[140px]">
+                <div className="flex items-center justify-between shrink-0 px-0.5">
                   <Label className="text-xs font-medium text-muted-foreground">
                     Instruksi Sistem (System Prompt):
                   </Label>
@@ -1087,13 +1367,13 @@ ${systemPrompt.trim()}
                       ? "Sesuaikan instruksi untuk ER-AI di sini..."
                       : "Pilih folder project dari antrean di sebelah kiri untuk menghasilkan instruksi otomatis..."
                   }
-                  className="flex-1 font-mono text-xs leading-relaxed bg-background resize-none min-h-[160px] border-border focus-visible:ring-teal-500/40"
+                  className="flex-1 font-mono text-xs leading-relaxed bg-background/80 resize-none min-h-[120px] border-border focus-visible:ring-teal-500/40 p-2.5 sm:p-3"
                 />
               </div>
 
               {/* Action Buttons Bar */}
               <div className="flex flex-col sm:flex-row gap-2 pt-2 sm:items-center sm:justify-between border-t border-border shrink-0">
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -1102,7 +1382,7 @@ ${systemPrompt.trim()}
                     title="Salin format Modelfile lengkap"
                   >
                     <Copy className="size-3.5" />
-                    Salin Modelfile
+                    <span className="hidden xs:inline">Salin</span> Modelfile
                   </Button>
                   <Button
                     variant="outline"
@@ -1113,11 +1393,11 @@ ${systemPrompt.trim()}
                     title="Salin instruksi prompt ke clipboard"
                   >
                     <FileCode className="size-3.5" />
-                    Salin Prompt
+                    <span className="hidden xs:inline">Salin</span> Prompt
                   </Button>
-                  <div className="hidden xl:flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-mono pl-1">
+                  <div className="hidden 2xl:flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-mono pl-1">
                     <ShieldCheck className="size-3.5" />
-                    <span>Read-Only: File proyek Anda aman 100% (tidak dimodifikasi)</span>
+                    <span>Read-Only: File proyek aman 100%</span>
                   </div>
                 </div>
 
@@ -1145,6 +1425,9 @@ ${systemPrompt.trim()}
                       const res = await processSingleProjectTraining({
                         projectPath,
                         baseModel: selectedBaseModel,
+                        targetModelName: targetModelName.trim() || undefined,
+                        analysisEngine,
+                        opencodeModel: "opencode/nemotron-3.5-lightning-free",
                         templateId: selectedTemplate,
                         temperature,
                         contextLength,
@@ -1172,9 +1455,17 @@ ${systemPrompt.trim()}
                             checks: { modelLoaded: true, answeredPersona: true, hasResponse: true },
                           });
                         }
-                        refreshQueue();
-                        refreshOllama();
-                        toast.success(`Model "${targetModelName}" berhasil dilatih & dianalisis!`);
+                        if (res.project?.target_model_name) {
+                          const match = res.project.target_model_name.match(/^(?:er-ai-code|er-ai):v?(\d+)\.(\d+)$/i);
+                          if (match) {
+                            const major = parseInt(match[1], 10);
+                            const minor = parseInt(match[2], 10);
+                            setTargetModelName(`er-ai-code:v${major}.${minor + 1}`);
+                          }
+                        }
+                        await refreshQueue();
+                        await refreshOllama();
+                        toast.success(`Model "${res.project?.target_model_name || targetModelName}" berhasil dilatih & dianalisis!`);
                       } else {
                         setTrainingStatus("error");
                         setTrainingLogs((prev) => [
@@ -1201,6 +1492,14 @@ ${systemPrompt.trim()}
           </Card>
         </div>
       </div>
+      ) : (
+        <TrainerChatTab
+          ollamaStatus={ollamaStatus}
+          defaultModelName={targetModelName}
+          projectQueue={projectQueue}
+          onRefreshOllama={refreshOllama}
+        />
+      )}
 
       {/* Multi-Stage Animated Progress & Verification Plan Modal */}
       <Dialog
@@ -1387,16 +1686,60 @@ ${systemPrompt.trim()}
                 Sedang memproses bertahap...
               </span>
             ) : (
-              <Button
-                onClick={() => setIsTrainingModalOpen(false)}
-                className="bg-teal-600 hover:bg-teal-500 text-white text-xs h-8 shadow-xs"
-              >
-                Selesai & Tutup
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsTrainingModalOpen(false);
+                    setPushTargetModel(targetModelName);
+                    setIsPushModalOpen(true);
+                  }}
+                  className="text-xs h-8 border-teal-500/40 text-teal-400 hover:bg-teal-500/10 gap-1.5"
+                >
+                  <UploadCloud className="size-3.5" />
+                  <span>Push ke Hub</span>
+                </Button>
+                <Button
+                  onClick={() => {
+                    setIsTrainingModalOpen(false);
+                    setActiveMainTab("chat");
+                  }}
+                  className="bg-teal-600 hover:bg-teal-500 text-white text-xs h-8 shadow-xs gap-1.5"
+                >
+                  <Bot className="size-3.5" />
+                  <span>Uji Model di Tab Chat AI &rarr;</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsTrainingModalOpen(false)}
+                  className="text-xs h-8 border-border"
+                >
+                  Tutup
+                </Button>
+              </div>
             )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* OpenCode & Open-Source Free Coding Models Catalog Dialog */}
+      <OpenCodeModelsDialog
+        open={isOpenCodeModalOpen}
+        onOpenChange={setIsOpenCodeModalOpen}
+        installedModels={ollamaStatus.models}
+        selectedBaseModel={selectedBaseModel}
+        onSelectModel={(modelName) => setSelectedBaseModel(modelName)}
+        onRefreshOllama={refreshOllama}
+      />
+
+      {/* Push Model to Ollama Hub / Export Modelfile Dialog */}
+      <PushModelDialog
+        open={isPushModalOpen}
+        onOpenChange={setIsPushModalOpen}
+        installedModels={ollamaStatus.models}
+        defaultModel={pushTargetModel || targetModelName}
+        onRefreshOllama={refreshOllama}
+      />
 
       {/* AI Analysis Inspection Modal */}
       <Dialog open={isAnalysisModalOpen} onOpenChange={setIsAnalysisModalOpen}>

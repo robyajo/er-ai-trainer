@@ -1,0 +1,34 @@
+{
+  "date": "2026-10-31",
+  "type": "feature",
+  "title": {
+    "id": "Pengelolaan Versi Model Otomatis & Pemasangan AI di Perangkat Lain",
+    "en": "Automated Model Versioning & Multi-Device AI Deployment"
+  },
+  "body": {
+    "id": "Aplikasi kini mendukung penomoran versi model kecerdasan buatan secara otomatis serta fitur berbagi dan pemasangan model ke perangkat lain dengan mudah.",
+    "en": "The application now supports automated version tracking for trained AI models alongside seamless cloud upload and export for deployment across multiple devices."
+  },
+  "items": [
+    {
+      "type": "new",
+      "id": "Fitur pengiriman model ke cloud dan ekspor mandiri untuk pemasangan di komputer atau laptop lain.",
+      "en": "Cloud model upload and offline export features for effortless installation on other computers or laptops."
+    },
+    {
+      "type": "improvement",
+      "id": "Penomoran versi model berkala secara otomatis dan pembersihan penyimpanan lama untuk menghemat kapasitas disk.",
+      "en": "Automated incremental model versioning with smart cleanup of older builds to optimize disk storage."
+    },
+    {
+      "type": "new",
+      "id": "Studio pengujian interaktif mandiri untuk memverifikasi pengetahuan dan kemampuan model secara langsung.",
+      "en": "Dedicated interactive testing studio to verify model intelligence and project knowledge in real time."
+    },
+    {
+      "type": "improvement",
+      "id": "Penyempurnaan tata letak antarmuka responsif di semua ukuran layar, harmonisasi jarak antar elemen, dan penyesuaian panel pengujian di layar kecil.",
+      "en": "Refined responsive interface layout across all screen resolutions with harmonized element spacing and adapted testing panels for smaller screens."
+    }
+  ]
+}
