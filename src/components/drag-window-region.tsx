@@ -113,7 +113,10 @@ export default function DragWindowRegion({
       <div className="draglayer flex flex-1 items-center h-full min-w-0 mr-3">
         {isMacOS && <div className="w-16 shrink-0" />}
         {title && (
-          <div className="flex items-center gap-2 truncate">
+          <div
+            className="no-drag flex items-center gap-2 truncate pointer-events-auto"
+            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+          >
             {title}
           </div>
         )}

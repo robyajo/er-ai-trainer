@@ -158,8 +158,8 @@ export function upsertProject(data: {
     stmt.run(
       data.project_path,
       data.project_name,
-      data.target_model_name || `er-ai-${data.project_name.toLowerCase().replace(/[^a-z0-9]/g, "-")}`,
-      data.base_model || "er-ai:latest",
+      data.target_model_name || "er-ai-code:v1.0",
+      data.base_model || "qwen2.5-coder:3b",
       data.status || "pending",
       techStackJson,
       frameworksJson,
@@ -178,20 +178,21 @@ export function upsertProject(data: {
   return getProjectByPath(data.project_path)!;
 }
 
-export function toggleIgnoreProject(projectPath: string, isIgnored: boolean): void {
+export function toggleIgnoreProject(projectPath: string, isIgnored: boolean): ProjectRecord[] {
   const db = getDatabase();
-  const now = new Date().toISOString();
-  const status = isIgnored ? "ignored" : "pending";
   const stmt = db.prepare(`
-    UPDATE trained_projects
-    SET is_ignored = ?, status = ?, updated_at = ?
+    UPDATE trained_projects SET
+      is_ignored = ?,
+      updated_at = ?
     WHERE project_path = ?
   `);
-  stmt.run(isIgnored ? 1 : 0, status, now, projectPath);
+  stmt.run(isIgnored ? 1 : 0, new Date().toISOString(), projectPath);
+  return getAllProjects();
 }
 
-export function deleteProjectFromDb(projectPath: string): void {
+export function deleteProjectFromDb(projectPath: string): ProjectRecord[] {
   const db = getDatabase();
   const stmt = db.prepare("DELETE FROM trained_projects WHERE project_path = ?");
   stmt.run(projectPath);
+  return getAllProjects();
 }

@@ -14,6 +14,36 @@ export async function getOllamaModels() {
   return await ipc.client.trainer.getOllamaModels();
 }
 
+export async function pullOllamaModel(modelName: string) {
+  return await ipc.client.trainer.pullOllamaModel({ modelName });
+}
+
+export async function deleteOllamaModel(modelName: string) {
+  return await ipc.client.trainer.deleteOllamaModel({ modelName });
+}
+
+export async function getOllamaPublicKey() {
+  return await ipc.client.trainer.getOllamaPublicKey();
+}
+
+export async function pushOllamaModel(params: {
+  sourceModel: string;
+  targetModel: string;
+}) {
+  return await ipc.client.trainer.pushOllamaModel(params);
+}
+
+export async function exportModelfile(modelName: string) {
+  return await ipc.client.trainer.exportModelfile({ modelName });
+}
+
+export async function saveModelfileToDisk(params: {
+  modelName: string;
+  content: string;
+}) {
+  return await ipc.client.trainer.saveModelfileToDisk(params);
+}
+
 export async function getModelInfo(modelName: string) {
   return await ipc.client.trainer.getModelInfo({ modelName });
 }
@@ -42,6 +72,26 @@ export async function testModel(modelName: string, testPrompt?: string) {
   return await ipc.client.trainer.testModel({ modelName, testPrompt });
 }
 
+export async function chatWithModel(params: {
+  modelName: string;
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string; images?: string[] }>;
+  temperature?: number;
+}) {
+  return await ipc.client.trainer.chatWithModel(params);
+}
+
+export async function getOpenCodeStatus() {
+  return await ipc.client.trainer.getOpenCodeStatus();
+}
+
+export async function runOpenCodePrompt(params: {
+  modelName: string;
+  prompt: string;
+  projectPath?: string;
+}) {
+  return await ipc.client.trainer.runOpenCodePrompt(params);
+}
+
 export async function getProjectQueue(): Promise<ProjectRecord[]> {
   return (await ipc.client.trainer.getProjectQueue()) as unknown as ProjectRecord[];
 }
@@ -61,6 +111,9 @@ export async function deleteProjectFromQueue(projectPath: string): Promise<Proje
 export async function processSingleProjectTraining(params: {
   projectPath: string;
   baseModel?: string;
+  targetModelName?: string;
+  analysisEngine?: "ollama" | "opencode";
+  opencodeModel?: string;
   templateId?: string;
   temperature?: number;
   contextLength?: number;

@@ -1,0 +1,44 @@
+{
+  "date": "2026-10-31",
+  "type": "feature",
+  "title": {
+    "id": "Studio AI Chat Multi-Modal: Model er-ai-think, Thinking Process, Suara, Gambar, dan Penyorotan Sintaks",
+    "en": "Multi-Modal AI Chat Studio: er-ai-think Model, Thinking Process, Voice, Vision & Syntax Highlighting"
+  },
+  "body": {
+    "id": "Studio percakapan AI kini mendukung seluruh spektrum interaksi kecerdasan buatan: model penalaran khusus er-ai-think:v1.0 (DeepSeek-R1), penalaran mendalam (Thinking Process), pengolahan citra visual (Vision), studio pengedit latar belakang gambar AI (Background Changer), input dikte suara (STT) serta pembacaan suara (TTS), dan penyorotan sintaks kode program (Syntax Highlighting) berbasis Shiki.",
+    "en": "The AI Chat Studio now supports the full spectrum of AI interactions: specialized reasoning model er-ai-think:v1.0 (DeepSeek-R1), deep reasoning (Thinking Process), visual image processing (Vision), integrated AI background changer studio, voice speech-to-text input, text-to-speech audio playback, and Shiki-powered code syntax highlighting."
+  },
+  "items": [
+    {
+      "type": "new",
+      "id": "Pembuatan model er-ai-think:v1.0 berbasis DeepSeek-R1 1.5B yang dikhususkan untuk penalaran mendalam, arsitektur software, dan debugging berjenjang.",
+      "en": "Creation of er-ai-think:v1.0 model powered by DeepSeek-R1 1.5B specialized for deep reasoning, software architecture, and step-by-step debugging."
+    },
+    {
+      "type": "new",
+      "id": "Studio Pengedit & Generator Gambar AI bawaan untuk mengubah latar belakang menjadi hitam pekat (studio black), transparan, atau warna kustom secara real-time.",
+      "en": "Built-in AI Image Editor & Generator Studio to seamlessly transform image backgrounds to studio black, transparent, or custom colors in real-time."
+    },
+    {
+      "type": "new",
+      "id": "Penyorotan sintaks kode program (Syntax Highlighting) dengan tema gelap modern, deteksi bahasa pemrograman otomatis, dan tombol salin kode instan.",
+      "en": "Modern dark-themed code syntax highlighting powered by Shiki with automatic language detection and one-click copy action."
+    },
+    {
+      "type": "new",
+      "id": "Dukungan proses berpikir mendalam (Thinking Process) dengan akordion interaktif untuk model penalaran seperti DeepSeek-R1 dan LFM3.",
+      "en": "Collapsible interactive Thinking Process accordion view for reasoning models like DeepSeek-R1 and LFM3."
+    },
+    {
+      "type": "new",
+      "id": "Dukungan multimodal visual (Vision) lewat er-ai-vision:v1.0 untuk melampirkan gambar, analisis visual, dan pratinjau resolusi penuh.",
+      "en": "Multimodal visual support via er-ai-vision:v1.0 for image attachments, visual reasoning, and full-resolution lightbox previews."
+    },
+    {
+      "type": "new",
+      "id": "Dukungan interaksi audio lengkap: dikte suara pengguna (Speech-to-Text) dan pembacaan jawaban asisten (Text-to-Speech).",
+      "en": "Full audio interaction suite featuring user voice dictation (STT) and assistant text-to-speech (TTS) voice playback."
+    }
+  ]
+}

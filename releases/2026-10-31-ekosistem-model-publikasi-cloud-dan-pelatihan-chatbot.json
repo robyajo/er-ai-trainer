@@ -1,0 +1,39 @@
+{
+  "date": "2026-10-31",
+  "type": "feature",
+  "title": {
+    "id": "Publikasi Cloud Model ER-AI, Pembersihan Namespace, dan Pelatihan Chatbot Bahasa Indonesia",
+    "en": "ER-AI Cloud Model Publishing, Namespace Normalization & Indonesian Chatbot Training Suite"
+  },
+  "body": {
+    "id": "Ekosistem model kecerdasan buatan ER-AI kini telah lengkap dengan 4 pilar terspesialisasi, dipublikasikan secara resmi ke Ollama Hub, dilengkapi dokumentasi arsitektur komprehensif, serta modul kurikulum dan dataset pelatihan bahasa Indonesia untuk fungsi chatbot tanya jawab cerdas.",
+    "en": "The ER-AI artificial intelligence model ecosystem is now complete with 4 specialized pillars, officially published to Ollama Hub, documented with a comprehensive architecture center, and powered by an Indonesian language curriculum and training dataset for intelligent Q&A chatbots."
+  },
+  "items": [
+    {
+      "type": "new",
+      "id": "Publikasi seluruh model keluarga ER-AI (er-ai-code, er-ai-assistant, er-ai-vision, er-ai-think, dan er-ai:v1.1) ke registry Ollama Hub sehingga siap digunakan dan diunduh di perangkat mana pun.",
+      "en": "Official publishing of all ER-AI model family variants (er-ai-code, er-ai-assistant, er-ai-vision, er-ai-think, and er-ai:v1.1) to Ollama Hub registry for global multi-device deployment."
+    },
+    {
+      "type": "improvement",
+      "id": "Sistem normalisasi nama model cerdas yang otomatis membersihkan prefix namespace akun remote dan membuang tag duplikat lokal agar daftar model Ollama selalu rapi.",
+      "en": "Smart model name normalization system that automatically strips remote account namespace prefixes and cleans local duplicate tags to keep Ollama listings pristine."
+    },
+    {
+      "type": "new",
+      "id": "Kurikulum pelatihan bahasa Indonesia komprehensif 7 modul (EYD V, KBBI, bahasa gaul/slang chat, customer service, budaya nusantara, surat formal, dan logika Q&A).",
+      "en": "Comprehensive 7-module Indonesian language training curriculum covering formal grammar, KBBI semantics, colloquial chat slang, customer service, local culture, and Q&A reasoning."
+    },
+    {
+      "type": "new",
+      "id": "Dataset instruksi tanya jawab multi-domain dan script pipeline otomatis (train_assistant.py) untuk melatih dan mengevaluasi model asisten secara langsung di Ollama.",
+      "en": "Multi-domain Q&A instruction dataset and automated training pipeline script (train_assistant.py) to train and benchmark the assistant model directly in Ollama."
+    },
+    {
+      "type": "new",
+      "id": "Pusat dokumentasi teknis lengkap di direktori docs/ mencakup matriks spesifikasi model, panduan VRAM hardware GPU RTX 2050, dan resep Modelfile.",
+      "en": "Comprehensive technical documentation center in docs/ directory featuring model specification matrix, RTX 2050 GPU VRAM allocation guides, and Modelfile recipes."
+    }
+  ]
+}

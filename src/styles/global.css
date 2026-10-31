@@ -145,4 +145,14 @@
   .draglayer {
     -webkit-app-region: drag;
   }
+
+  .no-drag,
+  .draglayer button,
+  .draglayer a,
+  .draglayer input,
+  .draglayer select,
+  .draglayer [role="button"],
+  .draglayer [role="tab"] {
+    -webkit-app-region: no-drag !important;
+  }
 }
